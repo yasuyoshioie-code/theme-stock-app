@@ -1,8 +1,12 @@
 import io
+import os
 import time as _time
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+
+# デフォルトのセクターデータファイル（アプリ内蔵）
+DEFAULT_XLSX = os.path.join(os.path.dirname(__file__), "default_sectors.xlsx")
 
 from data_loader import load_sector_data, get_all_tickers, get_sector_tickers
 from market_data import fetch_market_data_with_progress
@@ -69,9 +73,14 @@ st.title("テーマ株セクター 売買代金ダッシュボード")
 with st.sidebar:
     st.header("設定")
 
+    # デフォルトデータの有無を表示
+    has_default = os.path.exists(DEFAULT_XLSX)
+    if has_default:
+        st.success("✅ 内蔵データ: テーマ株40セクター")
     uploaded_file = st.file_uploader(
-        "テーマ株スプレッドシート (.xlsx)",
+        "別のデータで上書き（任意）",
         type=["xlsx"],
+        help="アップロードしなければ内蔵の40セクターデータを使用します",
     )
 
     st.divider()
@@ -144,7 +153,14 @@ def generate_template() -> bytes:
 
 
 # --- メインコンテンツ ---
-if uploaded_file is None:
+# データソース決定: アップロード優先、なければ内蔵データ
+if uploaded_file is not None:
+    data_source = uploaded_file
+    data_label = "アップロードデータ"
+elif os.path.exists(DEFAULT_XLSX):
+    data_source = DEFAULT_XLSX
+    data_label = "内蔵データ（テーマ株40セクター）"
+else:
     st.info("サイドバーからテーマ株スプレッドシート (.xlsx) をアップロードしてください。")
     st.markdown(
         """
@@ -167,8 +183,10 @@ if uploaded_file is None:
     )
     st.stop()
 
+st.caption(f"📂 データソース: {data_label}")
+
 # データ読込
-sectors = load_sector_data(uploaded_file)
+sectors = load_sector_data(data_source)
 sector_tickers = get_sector_tickers(sectors)
 all_tickers = get_all_tickers(sectors)
 

@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 *.xlsx
+!default_sectors.xlsx
 *.csv
 .DS_Store
 Thumbs.db

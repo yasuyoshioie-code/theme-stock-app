@@ -9,6 +9,8 @@ def load_sector_data(uploaded_file) -> dict[str, pd.DataFrame]:
     対応フォーマット:
     1. 各シート = 1セクター（シート名がセクター名）
     2. 「テーマ別個別銘柄」シートに全テーマが縦に連結（■ テーマ名 で区切り）
+
+    uploaded_file: UploadedFile オブジェクト または ファイルパス文字列
     """
     excel_file = pd.ExcelFile(uploaded_file, engine="openpyxl")
     sectors = {}
