@@ -54,6 +54,16 @@ from disclosure import (
     get_category_color,
     check_new_disclosures,
 )
+from shikiho_csv import (
+    CsvType,
+    detect_csv_type,
+    load_stock_price_csv,
+    load_watchlist_csv,
+    load_generic_csv,
+    stock_price_candlestick,
+    stock_price_summary,
+    watchlist_profit_chart,
+)
 
 st.set_page_config(
     page_title="テーマ株セクター 売買代金ダッシュボード",
@@ -264,8 +274,8 @@ if st.session_state.get("fetch_triggered"):
 
 # --- タブ表示 ---
 # ニュース・市場ランキングは常に表示、売買代金系はデータ取得後に表示
-tab8, tab9, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📰 ニュース", "📋 適時開示", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
+tab8, tab9, tab10, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📰 ニュース", "📋 適時開示", "📙 四季報CSV", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
 )
 
 _NEED_DATA_MSG = "⬆️ 上の「📈 売買代金データを取得」ボタンを押してデータを取得してください。"
@@ -1133,6 +1143,202 @@ with tab9:
             limit=None,
             key="disc_autorefresh",
         )
+
+# ===== タブ10: 四季報CSV分析 =====
+with tab10:
+    st.subheader("📙 四季報オンライン CSV分析")
+    st.caption("四季報オンライン プレミアムからダウンロードしたCSVを読み込んで分析")
+
+    # CSVアップローダー
+    st.markdown("""
+    **対応CSV:**
+    - 📈 **株価CSV** — ローソク足チャート・移動平均線・出来高
+    - 📋 **ウォッチリスト一覧CSV** — 損益分析・ポートフォリオ一覧
+    - 📊 **指標CSV / 業績CSV** — Chrome拡張からの指標・業績データ
+    """)
+
+    shikiho_files = st.file_uploader(
+        "四季報CSVをアップロード",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="shikiho_csv_upload",
+        help="複数ファイルを同時にアップロード可能",
+    )
+
+    if shikiho_files:
+        for file_idx, uploaded_csv in enumerate(shikiho_files):
+            st.divider()
+            file_name = uploaded_csv.name
+
+            try:
+                # まず汎用読み込みで種類判定
+                raw_df = pd.read_csv(uploaded_csv, encoding="utf-8-sig", nrows=5)
+                uploaded_csv.seek(0)
+                csv_type = detect_csv_type(raw_df)
+
+                st.markdown(f"### 📄 {file_name}")
+                st.caption(f"自動判定: **{csv_type.value}** | サイズ: {uploaded_csv.size:,} bytes")
+
+                if csv_type == CsvType.STOCK_PRICE:
+                    # --- 株価CSV ---
+                    df = load_stock_price_csv(uploaded_csv)
+
+                    if not df.empty:
+                        # サマリーカード
+                        stats = stock_price_summary(df)
+                        cols = st.columns(len(stats))
+                        for i, (label, value) in enumerate(stats.items()):
+                            with cols[i % len(cols)]:
+                                st.metric(label, value)
+
+                        # ローソク足チャート
+                        ticker_name = re.sub(r"_daily.*\.csv$", "", file_name, flags=re.IGNORECASE)
+                        fig = stock_price_candlestick(df, title=f"{ticker_name} 株価チャート")
+                        st.plotly_chart(fig, use_container_width=True, key=f"shikiho_candle_{file_idx}")
+
+                        # データテーブル
+                        with st.expander("📊 生データを表示", expanded=False):
+                            st.dataframe(
+                                df.reset_index(),
+                                use_container_width=True,
+                                height=400,
+                                key=f"shikiho_price_df_{file_idx}",
+                            )
+                    else:
+                        st.warning("株価データの読み込みに失敗しました。")
+
+                elif csv_type == CsvType.WATCHLIST:
+                    # --- ウォッチリスト ---
+                    df = load_watchlist_csv(uploaded_csv)
+
+                    if not df.empty:
+                        st.success(f"ウォッチリスト: {len(df)}銘柄")
+
+                        # 損益チャート
+                        chart = watchlist_profit_chart(df)
+                        if chart:
+                            st.plotly_chart(chart, use_container_width=True, key=f"shikiho_wl_chart_{file_idx}")
+
+                        # テーブル表示
+                        st.dataframe(
+                            df,
+                            use_container_width=True,
+                            height=min(600, len(df) * 35 + 50),
+                            hide_index=True,
+                            key=f"shikiho_wl_df_{file_idx}",
+                        )
+
+                        # 基本統計
+                        pnl_col = next((c for c in df.columns if "損益(%)" in c or "損益(%" in c), None)
+                        if pnl_col and df[pnl_col].notna().any():
+                            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                            with col_s1:
+                                st.metric("銘柄数", f"{len(df)}")
+                            with col_s2:
+                                winners = (df[pnl_col] > 0).sum()
+                                st.metric("含み益銘柄", f"{winners}銘柄", delta=f"{winners/len(df)*100:.0f}%")
+                            with col_s3:
+                                st.metric("最大利益", f"{df[pnl_col].max():+.1f}%")
+                            with col_s4:
+                                st.metric("最大損失", f"{df[pnl_col].min():+.1f}%")
+                    else:
+                        st.warning("ウォッチリストの読み込みに失敗しました。")
+
+                elif csv_type in (CsvType.INDICATORS, CsvType.FINANCIAL):
+                    # --- 指標/業績CSV ---
+                    df = load_generic_csv(uploaded_csv)
+
+                    if not df.empty:
+                        label = "指標データ" if csv_type == CsvType.INDICATORS else "業績データ"
+                        st.success(f"{label}: {len(df)}銘柄 × {len(df.columns)}項目")
+
+                        # テーブル表示
+                        st.dataframe(
+                            df,
+                            use_container_width=True,
+                            height=min(600, len(df) * 35 + 50),
+                            hide_index=True,
+                            key=f"shikiho_gen_df_{file_idx}",
+                        )
+
+                        # 数値列のサマリー
+                        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+                        if numeric_cols:
+                            with st.expander("📊 統計サマリー", expanded=False):
+                                st.dataframe(
+                                    df[numeric_cols].describe().T.round(2),
+                                    use_container_width=True,
+                                    key=f"shikiho_gen_stats_{file_idx}",
+                                )
+
+                            # ソート機能
+                            sort_col = st.selectbox(
+                                "並び替え列",
+                                options=numeric_cols,
+                                index=0,
+                                key=f"shikiho_sort_{file_idx}",
+                            )
+                            sort_order = st.radio(
+                                "順序",
+                                ["降順", "昇順"],
+                                horizontal=True,
+                                key=f"shikiho_order_{file_idx}",
+                            )
+                            sorted_df = df.sort_values(
+                                sort_col, ascending=(sort_order == "昇順")
+                            ).reset_index(drop=True)
+                            sorted_df.index = sorted_df.index + 1
+                            sorted_df.index.name = "順位"
+                            st.dataframe(
+                                sorted_df,
+                                use_container_width=True,
+                                height=600,
+                                key=f"shikiho_sorted_df_{file_idx}",
+                            )
+                    else:
+                        st.warning("データの読み込みに失敗しました。")
+
+                else:
+                    # --- 不明なCSV → 汎用表示 ---
+                    df = load_generic_csv(uploaded_csv)
+                    if not df.empty:
+                        st.info(f"CSV種類を自動判定できませんでした。汎用表示します（{len(df)}行 × {len(df.columns)}列）")
+                        st.dataframe(
+                            df,
+                            use_container_width=True,
+                            height=min(600, len(df) * 35 + 50),
+                            hide_index=True,
+                            key=f"shikiho_unk_df_{file_idx}",
+                        )
+                    else:
+                        st.error("CSVの読み込みに失敗しました。")
+
+            except Exception as e:
+                st.error(f"❌ {file_name} の読み込みエラー: {e}")
+
+    else:
+        # ガイダンス表示
+        st.info("👆 四季報オンラインからダウンロードしたCSVファイルをアップロードしてください。")
+
+        st.markdown("""
+        #### 📥 CSVの取得方法
+
+        **株価CSV（プレミアム限定）:**
+        1. 四季報オンラインで銘柄ページを開く
+        2. 「時系列株価」セクションの「株価CSVダウンロード」ボタンをクリック
+        3. ダウンロードされたCSVをここにアップロード
+
+        **ウォッチリストCSV:**
+        1. ウォッチリストページの「一覧」タブを開く
+        2. 「CSVダウンロード」ボタンをクリック
+
+        **指標・業績CSV（Chrome拡張）:**
+        1. Chrome拡張「四季報オンライン BrowserExtension」をインストール
+        2. ウォッチリストの「指標」or「業績」タブを開く
+        3. 拡張機能のCSVボタンでダウンロード
+
+        > 💡 **複数ファイルを同時にアップロード可能です！**
+        """)
 
 # フッター
 st.divider()
