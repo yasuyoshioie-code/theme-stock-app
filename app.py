@@ -49,6 +49,11 @@ from news_feed import (
     get_source_icon,
     get_source_color,
 )
+from disclosure import (
+    fetch_disclosure,
+    get_category_color,
+    check_new_disclosures,
+)
 
 st.set_page_config(
     page_title="テーマ株セクター 売買代金ダッシュボード",
@@ -259,8 +264,8 @@ if st.session_state.get("fetch_triggered"):
 
 # --- タブ表示 ---
 # ニュース・市場ランキングは常に表示、売買代金系はデータ取得後に表示
-tab8, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📰 ニュース", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "📋 銘柄別詳細", "🚀 銘柄別変化率"]
+tab8, tab9, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📰 ニュース", "📋 適時開示", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
 )
 
 _NEED_DATA_MSG = "⬆️ 上の「📈 売買代金データを取得」ボタンを押してデータを取得してください。"
@@ -805,6 +810,265 @@ with tab8:
             interval=auto_interval_sec * 1000,
             limit=None,
             key="news_autorefresh",
+        )
+
+# ===== タブ9: 適時開示 =====
+with tab9:
+    st.subheader("📋 適時開示速報（日経）")
+    st.caption("日経電子版から最新の適時開示情報をリアルタイムで取得")
+
+    # 設定行
+    col_d1, col_d2, col_d3 = st.columns([1, 1, 1])
+    with col_d1:
+        disclosure_pages = st.selectbox(
+            "取得ページ数",
+            [1, 2, 3, 5],
+            index=0,
+            key="disclosure_pages",
+            help="1ページ = 約50件",
+        )
+    with col_d2:
+        disc_auto_interval = st.selectbox(
+            "自動更新間隔",
+            [("OFF", 0), ("1分", 60), ("3分", 180), ("5分", 300), ("10分", 600)],
+            index=3,  # デフォルト: 5分
+            format_func=lambda x: x[0],
+            key="disc_auto_interval",
+        )
+        disc_auto_sec = disc_auto_interval[1]
+    with col_d3:
+        disc_notify = st.toggle(
+            "🔔 新着通知ON",
+            value=st.session_state.get("disc_notify", True),
+            key="disc_notify_toggle",
+        )
+        st.session_state["disc_notify"] = disc_notify
+
+    # ボタン行
+    col_db1, col_db2 = st.columns([1, 1])
+    with col_db1:
+        disc_manual = st.button("📡 適時開示を取得", key="fetch_disc", type="primary", use_container_width=True)
+    with col_db2:
+        if disc_auto_sec > 0:
+            disc_auto_on = st.toggle("🔄 自動更新ON", value=st.session_state.get("disc_auto_on", False), key="disc_auto_toggle")
+            st.session_state["disc_auto_on"] = disc_auto_on
+        else:
+            disc_auto_on = False
+            st.session_state["disc_auto_on"] = False
+            st.caption("自動更新: OFF")
+
+    # --- 取得関数 ---
+    def _do_fetch_disclosure():
+        with st.spinner("適時開示を取得中..."):
+            items = fetch_disclosure(pages=disclosure_pages)
+
+        # 新着チェック
+        prev_keys = st.session_state.get("disc_prev_keys", set())
+        if prev_keys and disc_notify:
+            new_items = check_new_disclosures(items, prev_keys)
+            if new_items:
+                st.toast(f"🔔 新着開示 {len(new_items)}件!", icon="🔔")
+                for ni in new_items[:5]:
+                    st.toast(f"📄 {ni.company}: {ni.title[:40]}")
+                st.session_state["disc_new_keys"] = {ni.unique_key for ni in new_items}
+            else:
+                st.session_state["disc_new_keys"] = set()
+        else:
+            st.session_state["disc_new_keys"] = set()
+
+        # キーを保存
+        st.session_state["disc_prev_keys"] = {item.unique_key for item in items}
+        st.session_state["disc_items"] = items
+        st.session_state["disc_fetched_at"] = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        st.session_state["disc_last_fetch_ts"] = _time.time()
+
+    # 手動取得
+    if disc_manual:
+        _do_fetch_disclosure()
+
+    # 自動更新
+    if disc_auto_on and disc_auto_sec > 0:
+        last_ts = st.session_state.get("disc_last_fetch_ts", 0)
+        elapsed = _time.time() - last_ts
+        if elapsed >= disc_auto_sec:
+            _do_fetch_disclosure()
+
+    # タイマー表示
+    if disc_auto_on and disc_auto_sec > 0 and "disc_last_fetch_ts" in st.session_state:
+        last_ts = st.session_state["disc_last_fetch_ts"]
+        next_refresh = last_ts + disc_auto_sec
+        remaining = int(next_refresh - _time.time())
+        if remaining > 0:
+            mins, secs = divmod(remaining, 60)
+            st.info(f"🔄 自動更新ON（{disc_auto_interval[0]}間隔） — 次回更新まで {mins}分{secs}秒")
+        else:
+            st.info(f"🔄 自動更新ON（{disc_auto_interval[0]}間隔） — 更新中...")
+
+    # --- 開示カード表示 ---
+    if "disc_items" in st.session_state:
+        items = st.session_state["disc_items"]
+        fetched_at = st.session_state.get("disc_fetched_at", "")
+        new_keys = st.session_state.get("disc_new_keys", set())
+
+        if items:
+            st.success(f"取得件数: {len(items)}件 | 取得時刻: {fetched_at}")
+
+            # カテゴリフィルタ
+            all_cats = sorted(set(item.category for item in items))
+            filter_cat = st.multiselect(
+                "資料区分で絞り込み",
+                options=["すべて"] + all_cats,
+                default=["すべて"],
+                key="disc_filter_cat",
+            )
+
+            # 企業名検索
+            search_company = st.text_input(
+                "🔍 企業名で検索",
+                value="",
+                key="disc_search_company",
+                placeholder="企業名を入力...",
+            )
+
+            filtered = items
+            if "すべて" not in filter_cat:
+                filtered = [it for it in filtered if it.category in filter_cat]
+            if search_company.strip():
+                q = search_company.strip()
+                filtered = [it for it in filtered if q in it.company or q in it.title]
+
+            st.markdown(f"**表示中: {len(filtered)}件 / 全{len(items)}件**")
+
+            import html as _html
+
+            # 開示カードCSS
+            _disc_css = """
+            <style>
+            .disc-card {
+                border: 1px solid #e0e0e0;
+                border-radius: 10px;
+                padding: 12px 16px;
+                margin-bottom: 8px;
+                background: #fafafa;
+                transition: box-shadow 0.2s, border-color 0.2s;
+            }
+            .disc-card:hover {
+                box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+                border-color: #b0b0b0;
+            }
+            .disc-card.disc-new {
+                background: #FFF8E1;
+                border-color: #FFB300;
+                border-width: 2px;
+            }
+            .disc-header {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 6px;
+                flex-wrap: wrap;
+            }
+            .disc-badge {
+                display: inline-block;
+                padding: 2px 10px;
+                border-radius: 12px;
+                font-size: 0.75em;
+                font-weight: 600;
+                white-space: nowrap;
+            }
+            .disc-new-tag {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 8px;
+                font-size: 0.70em;
+                font-weight: 700;
+                background: #FF6F00;
+                color: #FFF;
+                animation: disc-pulse 1.5s ease-in-out infinite;
+            }
+            @keyframes disc-pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.6; }
+            }
+            .disc-time {
+                color: #888;
+                font-size: 0.80em;
+                white-space: nowrap;
+            }
+            .disc-company {
+                font-weight: 700;
+                font-size: 0.90em;
+                color: #333;
+            }
+            .disc-title {
+                font-size: 0.95em;
+                font-weight: 500;
+                line-height: 1.45;
+                margin-top: 4px;
+            }
+            .disc-title a {
+                color: #1a1a1a;
+                text-decoration: none;
+            }
+            .disc-title a:hover {
+                color: #1565C0;
+                text-decoration: underline;
+            }
+            .disc-left-bar {
+                border-left: 4px solid;
+                padding-left: 14px;
+            }
+            </style>
+            """
+            st.markdown(_disc_css, unsafe_allow_html=True)
+
+            cards = []
+            for item in filtered:
+                bg, fg = get_category_color(item.category)
+                is_new = item.unique_key in new_keys
+
+                safe_title = _html.escape(item.title)
+                safe_company = _html.escape(item.company)
+                safe_cat = _html.escape(item.category)
+                safe_url = _html.escape(item.url) if item.url else ""
+                safe_age = _html.escape(item.age_str())
+                time_label = _html.escape(f"{item.date_str} {item.time_str}")
+
+                new_tag = '<span class="disc-new-tag">🔔 NEW</span>' if is_new else ""
+                card_class = "disc-card disc-left-bar disc-new" if is_new else "disc-card disc-left-bar"
+
+                title_html = f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a>' if safe_url else safe_title
+
+                card = f"""
+                <div class="{card_class}" style="border-left-color: {bg};">
+                  <div class="disc-header">
+                    <span class="disc-badge" style="background:{bg};color:{fg};">{safe_cat}</span>
+                    <span class="disc-company">{safe_company}</span>
+                    {new_tag}
+                    <span class="disc-time">{time_label} ({safe_age})</span>
+                  </div>
+                  <div class="disc-title">
+                    {title_html}
+                  </div>
+                </div>
+                """
+                cards.append(card)
+
+            # バッチレンダリング
+            BATCH = 25
+            for i in range(0, len(cards), BATCH):
+                chunk = "\n".join(cards[i:i + BATCH])
+                st.markdown(chunk, unsafe_allow_html=True)
+        else:
+            st.warning("適時開示データを取得できませんでした。")
+
+    # 自動更新: st_autorefresh
+    if disc_auto_on and disc_auto_sec > 0:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(
+            interval=disc_auto_sec * 1000,
+            limit=None,
+            key="disc_autorefresh",
         )
 
 # フッター
