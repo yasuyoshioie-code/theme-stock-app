@@ -213,210 +213,221 @@ if st.button("📈 売買代金データを取得", type="primary", use_containe
     st.session_state["freq"] = freq_map[freq]
     st.session_state["selected_sectors"] = selected_sectors
 
-if not st.session_state.get("fetch_triggered"):
-    st.info("「売買代金データを取得」ボタンを押してデータを取得してください。")
-    st.stop()
+# 売買代金データの取得（トリガー済みの場合のみ）
+has_market_data = False
+if st.session_state.get("fetch_triggered"):
+    start_str = st.session_state["start_date"]
+    end_str = st.session_state["end_date"]
+    current_freq = st.session_state["freq"]
+    current_sectors = st.session_state["selected_sectors"]
 
-# 株価データ取得
-start_str = st.session_state["start_date"]
-end_str = st.session_state["end_date"]
-current_freq = st.session_state["freq"]
-current_sectors = st.session_state["selected_sectors"]
+    selected_tickers = set()
+    for s in current_sectors:
+        if s in sector_tickers:
+            selected_tickers.update(sector_tickers[s])
+    selected_tickers = sorted(selected_tickers)
 
-# 選択セクターのティッカーだけ取得
-selected_tickers = set()
-for s in current_sectors:
-    if s in sector_tickers:
-        selected_tickers.update(sector_tickers[s])
-selected_tickers = sorted(selected_tickers)
+    if selected_tickers:
+        st.info(f"取得対象: {len(selected_tickers)}銘柄 | 期間: {start_str} 〜 {end_str}")
 
-if not selected_tickers:
-    st.warning("セクターが選択されていません。")
-    st.stop()
+        data = fetch_market_data_with_progress(
+            tickers_tuple=tuple(selected_tickers),
+            start_date=start_str,
+            end_date=end_str,
+        )
 
-st.info(f"取得対象: {len(selected_tickers)}銘柄 | 期間: {start_str} 〜 {end_str}")
+        if not data.empty:
+            available = sorted(set(data.columns.get_level_values(0))) if isinstance(data.columns, pd.MultiIndex) else []
+            st.success(f"取得完了: {len(available)}銘柄 | データ形状: {data.shape}")
 
-data = fetch_market_data_with_progress(
-    tickers_tuple=tuple(selected_tickers),
-    start_date=start_str,
-    end_date=end_str,
-)
+            # 集計
+            filtered_sector_tickers = {k: v for k, v in sector_tickers.items() if k in current_sectors}
+            sector_df = aggregate_by_sector(data, filtered_sector_tickers, freq=current_freq)
+            summary = get_sector_summary(sector_df)
+            detail = get_stock_detail(data, filtered_sector_tickers, sectors)
 
-if data.empty:
-    st.error("データの取得に失敗しました。期間やセクターを確認してください。")
-    st.stop()
-else:
-    available = sorted(set(data.columns.get_level_values(0))) if isinstance(data.columns, pd.MultiIndex) else []
-    st.success(f"取得完了: {len(available)}銘柄 | データ形状: {data.shape}")
-
-# 集計
-filtered_sector_tickers = {k: v for k, v in sector_tickers.items() if k in current_sectors}
-sector_df = aggregate_by_sector(data, filtered_sector_tickers, freq=current_freq)
-summary = get_sector_summary(sector_df)
-detail = get_stock_detail(data, filtered_sector_tickers, sectors)
-
-# 変化率・ランキング計算
-momentum = get_momentum_ranking(sector_df)
-comparison = get_period_comparison(sector_df)
-hot_sectors = get_hot_sectors(sector_df, top_n=5)
-stock_momentum = get_stock_momentum(data, filtered_sector_tickers, sectors)
+            # 変化率・ランキング計算
+            momentum = get_momentum_ranking(sector_df)
+            comparison = get_period_comparison(sector_df)
+            hot_sectors = get_hot_sectors(sector_df, top_n=5)
+            stock_momentum = get_stock_momentum(data, filtered_sector_tickers, sectors)
+            has_market_data = True
+        else:
+            st.error("データの取得に失敗しました。期間やセクターを確認してください。")
+    else:
+        st.warning("セクターが選択されていません。")
 
 # --- タブ表示 ---
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
-    ["📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "📋 銘柄別詳細", "🚀 銘柄別変化率", "🏆 市場ランキング", "📰 ニュース"]
+# ニュース・市場ランキングは常に表示、売買代金系はデータ取得後に表示
+tab8, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📰 ニュース", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "📋 銘柄別詳細", "🚀 銘柄別変化率"]
 )
+
+_NEED_DATA_MSG = "⬆️ 上の「📈 売買代金データを取得」ボタンを押してデータを取得してください。"
 
 # ===== タブ1: セクター概況 =====
 with tab1:
-    st.plotly_chart(sector_bar_chart(summary), use_container_width=True)
-    st.subheader("セクター別サマリー")
-    st.dataframe(summary, use_container_width=True)
+    if has_market_data:
+        st.plotly_chart(sector_bar_chart(summary), use_container_width=True)
+        st.subheader("セクター別サマリー")
+        st.dataframe(summary, use_container_width=True)
+    else:
+        st.info(_NEED_DATA_MSG)
 
 # ===== タブ2: 盛り上がりランキング（新機能） =====
 with tab2:
-    st.subheader("🔥 セクター盛り上がりランキング")
-    st.caption("直近5日変化率・期間後半変化率・vs期間平均 の加重平均でスコア化")
+    if has_market_data:
+        st.subheader("🔥 セクター盛り上がりランキング")
+        st.caption("直近5日変化率・期間後半変化率・vs期間平均 の加重平均でスコア化")
 
-    if not momentum.empty:
-        col1, col2 = st.columns([3, 2])
-        with col1:
-            st.plotly_chart(momentum_bar_chart(momentum), use_container_width=True)
-        with col2:
-            st.dataframe(momentum, use_container_width=True, height=400)
+        if not momentum.empty:
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                st.plotly_chart(momentum_bar_chart(momentum), use_container_width=True)
+            with col2:
+                st.dataframe(momentum, use_container_width=True, height=400)
 
-    st.divider()
-    st.subheader("週間・期間 変化率")
+        st.divider()
+        st.subheader("週間・期間 変化率")
 
-    if not comparison.empty:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(week_change_bar_chart(comparison), use_container_width=True)
-        with col2:
-            st.plotly_chart(period_change_bar_chart(comparison), use_container_width=True)
+        if not comparison.empty:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.plotly_chart(week_change_bar_chart(comparison), use_container_width=True)
+            with col2:
+                st.plotly_chart(period_change_bar_chart(comparison), use_container_width=True)
 
-        st.subheader("比較データ詳細")
-        st.dataframe(comparison, use_container_width=True, hide_index=True)
+            st.subheader("比較データ詳細")
+            st.dataframe(comparison, use_container_width=True, hide_index=True)
+    else:
+        st.info(_NEED_DATA_MSG)
 
 # ===== タブ3: 時系列推移（改良版） =====
 with tab3:
-    st.subheader("📈 売買代金 時系列推移")
+    if has_market_data:
+        st.subheader("📈 売買代金 時系列推移")
 
-    # 表示モード選択
-    chart_mode = st.radio(
-        "表示モード",
-        ["すべて表示", "盛り上がりTop5を強調", "カスタム選択"],
-        horizontal=True,
-        key="chart_mode",
-    )
-
-    if chart_mode == "すべて表示":
-        highlight = None  # 全部同じ太さで表示
-        chart_sectors = current_sectors
-    elif chart_mode == "盛り上がりTop5を強調":
-        highlight = hot_sectors
-        chart_sectors = current_sectors  # 全部表示するが、Top5だけ太線
-        st.caption(f"強調セクター: {', '.join(hot_sectors)}")
-    else:
-        # カスタム選択
-        highlight = st.multiselect(
-            "強調表示するセクターを選択",
-            options=current_sectors,
-            default=hot_sectors[:3] if hot_sectors else current_sectors[:3],
-            key="highlight_sectors",
-        )
-        chart_sectors = current_sectors
-
-    st.plotly_chart(
-        timeseries_chart(sector_df, chart_sectors, highlight_sectors=highlight),
-        use_container_width=True,
-    )
-
-# ===== タブ4: セクター比較 =====
-with tab4:
-    col1, col2 = st.columns(2)
-    with col1:
-        st.plotly_chart(
-            comparison_bar_chart(sector_df, current_sectors), use_container_width=True
-        )
-    with col2:
-        st.plotly_chart(
-            normalized_chart(sector_df, current_sectors), use_container_width=True
+        chart_mode = st.radio(
+            "表示モード",
+            ["すべて表示", "盛り上がりTop5を強調", "カスタム選択"],
+            horizontal=True,
+            key="chart_mode",
         )
 
-# ===== タブ5: 銘柄別詳細 =====
-with tab5:
-    st.plotly_chart(stock_detail_bar(detail), use_container_width=True)
-    st.subheader("銘柄別売買代金一覧")
-    st.dataframe(detail.reset_index(drop=True), use_container_width=True, hide_index=True)
-
-# ===== タブ6: 銘柄別変化率（新機能） =====
-with tab6:
-    st.subheader("🚀 銘柄別 売買代金変化率ランキング")
-    st.caption("前日比・週間変化・月間変化・vs期間平均 の加重平均で急騰スコアを算出")
-
-    if not stock_momentum.empty:
-        # フィルター
-        col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
-        with col_f1:
-            sector_filter = st.multiselect(
-                "セクターで絞り込み",
-                options=["すべて"] + sorted(stock_momentum["セクター"].unique().tolist()),
-                default=["すべて"],
-                key="stock_momentum_sector_filter",
+        if chart_mode == "すべて表示":
+            highlight = None
+            chart_sectors = current_sectors
+        elif chart_mode == "盛り上がりTop5を強調":
+            highlight = hot_sectors
+            chart_sectors = current_sectors
+            st.caption(f"強調セクター: {', '.join(hot_sectors)}")
+        else:
+            highlight = st.multiselect(
+                "強調表示するセクターを選択",
+                options=current_sectors,
+                default=hot_sectors[:3] if hot_sectors else current_sectors[:3],
+                key="highlight_sectors",
             )
-        with col_f2:
-            top_n_select = st.selectbox(
-                "表示件数",
-                [10, 20, 30, 50, 100],
-                index=1,
-                key="stock_momentum_top_n",
-            )
-        with col_f3:
-            sort_col = st.selectbox(
-                "ソート基準",
-                ["急騰スコア", "前日比(%)", "週間変化(%)", "月間変化(%)", "vs平均(%)"],
-                index=0,
-                key="stock_momentum_sort",
-            )
+            chart_sectors = current_sectors
 
-        # フィルター適用
-        filtered_momentum = stock_momentum.copy()
-        if "すべて" not in sector_filter:
-            filtered_momentum = filtered_momentum[
-                filtered_momentum["セクター"].isin(sector_filter)
-            ]
-
-        # ソート適用
-        filtered_momentum = filtered_momentum.sort_values(
-            sort_col, ascending=False
-        ).reset_index(drop=True)
-        filtered_momentum.index = filtered_momentum.index + 1
-        filtered_momentum.index.name = "順位"
-
-        st.markdown(f"**対象銘柄数: {len(filtered_momentum)}**")
-
-        # チャートとテーブル
-        col1, col2 = st.columns([3, 2])
-        with col1:
-            st.plotly_chart(
-                stock_momentum_bar_chart(filtered_momentum, top_n=top_n_select),
-                use_container_width=True,
-            )
-        with col2:
-            st.dataframe(
-                filtered_momentum.head(top_n_select),
-                use_container_width=True,
-                height=600,
-            )
-
-        st.divider()
-        st.subheader("変化率ヒートマップ")
         st.plotly_chart(
-            stock_change_heatmap(filtered_momentum, top_n=min(top_n_select, 30)),
+            timeseries_chart(sector_df, chart_sectors, highlight_sectors=highlight),
             use_container_width=True,
         )
     else:
-        st.warning("銘柄別の変化率データを計算できませんでした。")
+        st.info(_NEED_DATA_MSG)
+
+# ===== タブ4: セクター比較 =====
+with tab4:
+    if has_market_data:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(
+                comparison_bar_chart(sector_df, current_sectors), use_container_width=True
+            )
+        with col2:
+            st.plotly_chart(
+                normalized_chart(sector_df, current_sectors), use_container_width=True
+            )
+    else:
+        st.info(_NEED_DATA_MSG)
+
+# ===== タブ5: 銘柄別詳細 =====
+with tab5:
+    if has_market_data:
+        st.plotly_chart(stock_detail_bar(detail), use_container_width=True)
+        st.subheader("銘柄別売買代金一覧")
+        st.dataframe(detail.reset_index(drop=True), use_container_width=True, hide_index=True)
+    else:
+        st.info(_NEED_DATA_MSG)
+
+# ===== タブ6: 銘柄別変化率（新機能） =====
+with tab6:
+    if has_market_data:
+        st.subheader("🚀 銘柄別 売買代金変化率ランキング")
+        st.caption("前日比・週間変化・月間変化・vs期間平均 の加重平均で急騰スコアを算出")
+
+        if not stock_momentum.empty:
+            col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
+            with col_f1:
+                sector_filter = st.multiselect(
+                    "セクターで絞り込み",
+                    options=["すべて"] + sorted(stock_momentum["セクター"].unique().tolist()),
+                    default=["すべて"],
+                    key="stock_momentum_sector_filter",
+                )
+            with col_f2:
+                top_n_select = st.selectbox(
+                    "表示件数",
+                    [10, 20, 30, 50, 100],
+                    index=1,
+                    key="stock_momentum_top_n",
+                )
+            with col_f3:
+                sort_col = st.selectbox(
+                    "ソート基準",
+                    ["急騰スコア", "前日比(%)", "週間変化(%)", "月間変化(%)", "vs平均(%)"],
+                    index=0,
+                    key="stock_momentum_sort",
+                )
+
+            filtered_momentum = stock_momentum.copy()
+            if "すべて" not in sector_filter:
+                filtered_momentum = filtered_momentum[
+                    filtered_momentum["セクター"].isin(sector_filter)
+                ]
+
+            filtered_momentum = filtered_momentum.sort_values(
+                sort_col, ascending=False
+            ).reset_index(drop=True)
+            filtered_momentum.index = filtered_momentum.index + 1
+            filtered_momentum.index.name = "順位"
+
+            st.markdown(f"**対象銘柄数: {len(filtered_momentum)}**")
+
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                st.plotly_chart(
+                    stock_momentum_bar_chart(filtered_momentum, top_n=top_n_select),
+                    use_container_width=True,
+                )
+            with col2:
+                st.dataframe(
+                    filtered_momentum.head(top_n_select),
+                    use_container_width=True,
+                    height=600,
+                )
+
+            st.divider()
+            st.subheader("変化率ヒートマップ")
+            st.plotly_chart(
+                stock_change_heatmap(filtered_momentum, top_n=min(top_n_select, 30)),
+                use_container_width=True,
+            )
+        else:
+            st.warning("銘柄別の変化率データを計算できませんでした。")
+    else:
+        st.info(_NEED_DATA_MSG)
 
 # ===== タブ7: 市場ランキング =====
 with tab7:
@@ -798,4 +809,7 @@ with tab8:
 
 # フッター
 st.divider()
-st.caption(f"データ期間: {start_str} 〜 {end_str} | 集計単位: {freq} | データソース: Yahoo Finance (yfinance)")
+if has_market_data:
+    st.caption(f"データ期間: {start_str} 〜 {end_str} | 集計単位: {freq} | データソース: Yahoo Finance (yfinance)")
+else:
+    st.caption("データソース: Yahoo Finance (yfinance) | ニュース・市場ランキングは売買代金データ取得不要で利用できます")
