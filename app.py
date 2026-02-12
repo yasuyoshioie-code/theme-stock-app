@@ -583,11 +583,11 @@ with tab8:
             key="news_sources",
         )
     with col_n2:
-        max_articles = st.selectbox(
-            "最大表示件数",
-            [20, 50, 100, 200],
+        per_page = st.selectbox(
+            "1ページ表示件数",
+            [50, 100, 200],
             index=1,
-            key="news_max_articles",
+            key="news_per_page",
         )
     with col_n3:
         auto_refresh_interval = st.selectbox(
@@ -634,6 +634,7 @@ with tab8:
         st.session_state["news_items"] = news_items
         st.session_state["news_fetched_at"] = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         st.session_state["news_last_fetch_ts"] = _time.time()
+        st.session_state["news_page"] = 1  # 新規取得時はページ1に戻す
 
     # 手動取得
     if manual_fetch:
@@ -678,9 +679,45 @@ with tab8:
             if "すべて" not in filter_source:
                 filtered_items = [item for item in items if item.source in filter_source]
 
-            display_items = filtered_items[:max_articles]
+            # ページネーション
+            total_items = len(filtered_items)
+            total_pages = max(1, (total_items + per_page - 1) // per_page)
 
-            st.markdown(f"**表示中: {len(display_items)}件 / 全{len(filtered_items)}件**")
+            # ページ番号の管理
+            if "news_page" not in st.session_state:
+                st.session_state["news_page"] = 1
+            current_page = st.session_state["news_page"]
+            current_page = min(current_page, total_pages)
+
+            start_idx = (current_page - 1) * per_page
+            end_idx = min(start_idx + per_page, total_items)
+            display_items = filtered_items[start_idx:end_idx]
+
+            # ページナビ（上部）
+            col_pg1, col_pg2, col_pg3, col_pg4, col_pg5 = st.columns([1, 1, 2, 1, 1])
+            with col_pg1:
+                if st.button("⏮ 最初", key="news_pg_first", disabled=(current_page <= 1), use_container_width=True):
+                    st.session_state["news_page"] = 1
+                    st.rerun()
+            with col_pg2:
+                if st.button("◀ 前へ", key="news_pg_prev", disabled=(current_page <= 1), use_container_width=True):
+                    st.session_state["news_page"] = current_page - 1
+                    st.rerun()
+            with col_pg3:
+                st.markdown(
+                    f"<div style='text-align:center;padding:8px 0;font-weight:600;'>"
+                    f"📄 {current_page} / {total_pages} ページ "
+                    f"（{start_idx+1}〜{end_idx}件 / 全{total_items}件）</div>",
+                    unsafe_allow_html=True,
+                )
+            with col_pg4:
+                if st.button("次へ ▶", key="news_pg_next", disabled=(current_page >= total_pages), use_container_width=True):
+                    st.session_state["news_page"] = current_page + 1
+                    st.rerun()
+            with col_pg5:
+                if st.button("最後 ⏭", key="news_pg_last", disabled=(current_page >= total_pages), use_container_width=True):
+                    st.session_state["news_page"] = total_pages
+                    st.rerun()
 
             # --- カードCSS ---
             import html as _html
@@ -800,6 +837,32 @@ with tab8:
             for i in range(0, len(cards_html_parts), BATCH):
                 chunk = "\n".join(cards_html_parts[i:i + BATCH])
                 st.markdown(chunk, unsafe_allow_html=True)
+
+            # ページナビ（下部）
+            if total_pages > 1:
+                col_bpg1, col_bpg2, col_bpg3, col_bpg4, col_bpg5 = st.columns([1, 1, 2, 1, 1])
+                with col_bpg1:
+                    if st.button("⏮ 最初", key="news_bpg_first", disabled=(current_page <= 1), use_container_width=True):
+                        st.session_state["news_page"] = 1
+                        st.rerun()
+                with col_bpg2:
+                    if st.button("◀ 前へ", key="news_bpg_prev", disabled=(current_page <= 1), use_container_width=True):
+                        st.session_state["news_page"] = current_page - 1
+                        st.rerun()
+                with col_bpg3:
+                    st.markdown(
+                        f"<div style='text-align:center;padding:8px 0;font-weight:600;'>"
+                        f"📄 {current_page} / {total_pages} ページ</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_bpg4:
+                    if st.button("次へ ▶", key="news_bpg_next", disabled=(current_page >= total_pages), use_container_width=True):
+                        st.session_state["news_page"] = current_page + 1
+                        st.rerun()
+                with col_bpg5:
+                    if st.button("最後 ⏭", key="news_bpg_last", disabled=(current_page >= total_pages), use_container_width=True):
+                        st.session_state["news_page"] = total_pages
+                        st.rerun()
         else:
             st.warning("ニュースが取得できませんでした。ソースを変更してみてください。")
 
