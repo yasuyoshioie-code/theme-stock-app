@@ -204,7 +204,7 @@ def fetch_moomoo_news() -> list[NewsItem]:
             if key not in seen:
                 seen.add(key)
                 unique.append(item)
-        items = unique[:50]
+        items = unique[:80]
 
     except Exception as e:
         st.warning(f"moomoo証券 取得エラー: {e}")
@@ -221,7 +221,7 @@ def fetch_cnbc_world() -> list[NewsItem]:
     items = []
     try:
         feed = feedparser.parse(url)
-        for entry in feed.entries[:30]:
+        for entry in feed.entries[:50]:
             items.append(NewsItem(
                 title=entry.get("title", ""),
                 url=entry.get("link", ""),
@@ -239,14 +239,14 @@ def fetch_cnbc_world() -> list[NewsItem]:
 # Google News 経由の各メディア
 # ----------------------------------------------------------------
 
-def fetch_google_news_query(query: str, source_label: str, category: str = "株式") -> list[NewsItem]:
+def fetch_google_news_query(query: str, source_label: str, category: str = "株式", max_items: int = 50) -> list[NewsItem]:
     """Google News RSS で特定クエリのニュースを取得"""
     encoded = requests.utils.quote(query)
     url = f"https://news.google.com/rss/search?q={encoded}&hl=ja&gl=JP&ceid=JP:ja"
     items = []
     try:
         feed = feedparser.parse(url)
-        for entry in feed.entries[:20]:
+        for entry in feed.entries[:max_items]:
             title = entry.get("title", "")
             actual_source = source_label
             if " - " in title:
@@ -313,12 +313,84 @@ def fetch_nikkei() -> list[NewsItem]:
 
 
 def fetch_kabutan() -> list[NewsItem]:
-    """株探（Google News経由）"""
-    return fetch_google_news_query(
+    """株探（Google News + 直接スクレイピング併用）"""
+    items = []
+
+    # 1) Google News 経由
+    gn_items = fetch_google_news_query(
         "site:kabutan.jp",
         source_label="株探",
         category="株式",
     )
+    items.extend(gn_items)
+
+    # 2) 直接スクレイピング（table.s_news_list から最新ニュース）
+    for page in range(1, 4):  # 3ページ = 約30件
+        try:
+            url = f"https://kabutan.jp/news/marketnews/?b=n&page={page}"
+            resp = requests.get(url, headers=HEADERS, timeout=10)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            table = soup.select_one("table.s_news_list")
+            if not table:
+                break
+
+            for row in table.find_all("tr"):
+                tds = row.find_all("td")
+                if len(tds) < 3:
+                    continue
+
+                time_text = tds[0].get_text(strip=True)  # "02/12 13:18"
+                cat_text = tds[1].get_text(strip=True)    # "材料"
+                title_td = tds[2]
+                title = title_td.get_text(strip=True)
+                link = title_td.find("a", href=True)
+
+                item_url = ""
+                if link:
+                    href = link.get("href", "")
+                    item_url = "https://kabutan.jp" + href if not href.startswith("http") else href
+
+                # 日時パース: "02/12 13:18" → datetime
+                pub_dt = None
+                tm = re.match(r"(\d{2})/(\d{2})\s+(\d{1,2}):(\d{2})", time_text)
+                if tm:
+                    try:
+                        now = datetime.now(JST)
+                        mon, day = int(tm.group(1)), int(tm.group(2))
+                        hour, minute = int(tm.group(3)), int(tm.group(4))
+                        year = now.year
+                        pub_dt = datetime(year, mon, day, hour, minute, tzinfo=JST)
+                        if pub_dt > now:
+                            pub_dt = pub_dt.replace(year=year - 1)
+                    except ValueError:
+                        pass
+
+                items.append(NewsItem(
+                    title=title,
+                    url=item_url,
+                    source="株探",
+                    published=pub_dt,
+                    category=cat_text or "株式",
+                ))
+
+        except Exception:
+            break
+
+        if page < 3:
+            time.sleep(0.3)
+
+    # 重複除去
+    seen = set()
+    unique = []
+    for item in items:
+        key = re.sub(r"\s+", "", item.title)
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+
+    return unique
 
 
 # ----------------------------------------------------------------
@@ -331,7 +403,7 @@ def fetch_toyokeizai() -> list[NewsItem]:
     items = []
     try:
         feed = feedparser.parse(url)
-        for entry in feed.entries[:30]:
+        for entry in feed.entries[:50]:
             title = entry.get("title", "")
             # " | カテゴリ | 東洋経済オンライン" を除去
             title = re.sub(r"\s*\|.*東洋経済.*$", "", title)
@@ -361,16 +433,29 @@ def fetch_minkabu() -> list[NewsItem]:
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        for a_tag in soup.select("a[href*='/news/']"):
-            title = a_tag.get_text(strip=True)
+        # /news/数字 のパターンで正確にニュース記事リンクを取得
+        for a_tag in soup.find_all("a", href=True):
             href = a_tag.get("href", "")
+            if not re.match(r"^/news/\d+$", href):
+                continue
 
+            title = a_tag.get_text(strip=True)
             if not title or len(title) < 8:
                 continue
-            if not href.startswith("http"):
-                href = "https://minkabu.jp" + href
+            # 「続きを読む」等のリンクテキストはスキップ
+            if title in ("続きを読む", "もっと見る", "一覧を見る"):
+                continue
 
-            time_tag = a_tag.find_next("time") or a_tag.find_previous("time")
+            full_url = "https://minkabu.jp" + href
+
+            # 近くの time タグから日時取得
+            parent = a_tag.parent
+            time_tag = None
+            if parent:
+                time_tag = parent.find("time")
+            if not time_tag:
+                time_tag = a_tag.find_next("time") or a_tag.find_previous("time")
+
             pub_dt = None
             if time_tag:
                 dt_str = time_tag.get("datetime", "")
@@ -385,19 +470,21 @@ def fetch_minkabu() -> list[NewsItem]:
 
             items.append(NewsItem(
                 title=title,
-                url=href,
+                url=full_url,
                 source="みんかぶ",
                 published=pub_dt,
                 category="株式",
             ))
 
+        # 重複除去（同一タイトルの「続きを読む」リンクなど）
         seen = set()
         unique = []
         for item in items:
-            if item.title not in seen:
-                seen.add(item.title)
+            key = re.sub(r"\s+", "", item.title)
+            if key not in seen:
+                seen.add(key)
                 unique.append(item)
-        items = unique[:30]
+        items = unique[:50]
 
     except Exception as e:
         st.warning(f"みんかぶ 取得エラー: {e}")
@@ -414,6 +501,7 @@ def fetch_google_news_market() -> list[NewsItem]:
         "日本株 OR 東証 OR 日経平均 OR 株式市場",
         source_label="Google News",
         category="株式市場",
+        max_items=50,
     )
 
 
