@@ -1184,7 +1184,7 @@ with tab9:
                     {code_tag}
                     <span class="disc-company">{safe_company}</span>
                     {new_tag}
-                    <span class="disc-time">{time_label} ({safe_age})</span>
+                    <span class="disc-time">{time_label}</span>
                   </div>
                   <div class="disc-title">
                     {title_html}
