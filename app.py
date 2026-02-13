@@ -893,18 +893,18 @@ with tab8:
 
 # ===== タブ9: 適時開示 =====
 with tab9:
-    st.subheader("📋 適時開示速報（日経）")
-    st.caption("日経電子版から最新の適時開示情報をリアルタイムで取得")
+    st.subheader("📋 適時開示速報（TDnet）")
+    st.caption("東証TDnetから最新の適時開示情報をリアルタイムで取得")
 
     # 設定行
     col_d1, col_d2, col_d3 = st.columns([1, 1, 1])
     with col_d1:
         disclosure_pages = st.selectbox(
             "取得ページ数",
-            [1, 2, 3, 5],
-            index=0,
+            [1, 2, 3, 5, 10],
+            index=1,
             key="disclosure_pages",
-            help="1ページ = 約50件",
+            help="1ページ = 約100件（TDnet）",
         )
     with col_d2:
         disc_auto_interval = st.selectbox(
@@ -1007,7 +1007,7 @@ with tab9:
                 "🔍 企業名で検索",
                 value="",
                 key="disc_search_company",
-                placeholder="企業名を入力...",
+                placeholder="企業名 or 証券コードを入力...",
             )
 
             filtered = items
@@ -1015,7 +1015,7 @@ with tab9:
                 filtered = [it for it in filtered if it.category in filter_cat]
             if search_company.strip():
                 q = search_company.strip()
-                filtered = [it for it in filtered if q in it.company or q in it.title]
+                filtered = [it for it in filtered if q in it.company or q in it.title or q in it.code]
 
             # --- ページネーション設定 ---
             disc_per_page = st.selectbox(
@@ -1141,6 +1141,15 @@ with tab9:
                 color: #1565C0;
                 text-decoration: underline;
             }
+            .disc-code {
+                font-size: 0.75em;
+                font-weight: 600;
+                color: #1976D2;
+                background: #E3F2FD;
+                padding: 1px 6px;
+                border-radius: 4px;
+                font-family: monospace;
+            }
             .disc-left-bar {
                 border-left: 4px solid;
                 padding-left: 14px;
@@ -1156,13 +1165,15 @@ with tab9:
 
                 safe_title = _html.escape(item.title)
                 safe_company = _html.escape(item.company)
+                safe_code = _html.escape(item.code) if item.code else ""
                 safe_cat = _html.escape(item.category)
                 safe_url = _html.escape(item.url) if item.url else ""
                 safe_age = _html.escape(item.age_str())
-                time_label = _html.escape(f"{item.date_str} {item.time_str}")
+                time_label = _html.escape(f"{item.time_str}")
 
                 new_tag = '<span class="disc-new-tag">🔔 NEW</span>' if is_new else ""
                 card_class = "disc-card disc-left-bar disc-new" if is_new else "disc-card disc-left-bar"
+                code_tag = f'<span class="disc-code">{safe_code}</span>' if safe_code else ""
 
                 title_html = f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a>' if safe_url else safe_title
 
@@ -1170,6 +1181,7 @@ with tab9:
                 <div class="{card_class}" style="border-left-color: {bg};">
                   <div class="disc-header">
                     <span class="disc-badge" style="background:{bg};color:{fg};">{safe_cat}</span>
+                    {code_tag}
                     <span class="disc-company">{safe_company}</span>
                     {new_tag}
                     <span class="disc-time">{time_label} ({safe_age})</span>
