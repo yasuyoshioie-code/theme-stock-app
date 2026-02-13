@@ -832,27 +832,25 @@ with tab8:
                     safe_summary = _html.escape(s)
                 safe_category = _html.escape(item.category) if item.category else ""
 
-                card = f"""
-                <div class="news-card news-left-bar" style="border-left-color: {bg_color};">
-                  <div class="news-card-header">
-                    <span class="news-badge" style="background:{bg_color};color:{fg_color};">{icon} {safe_source}</span>
-                    {"<span class='news-category'>" + safe_category + "</span>" if safe_category else ""}
-                    <span class="news-age">{_html.escape(age)}</span>
-                  </div>
-                  <div class="news-title">
-                    <a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a>
-                  </div>
-                  {"<div class='news-summary'>" + safe_summary + "</div>" if safe_summary else ""}
-                  {"<div class='news-time'>" + _html.escape(time_str) + "</div>" if time_str else ""}
-                </div>
-                """
-                cards_html_parts.append(card)
+                cat_span = f"<span class='news-category'>{safe_category}</span>" if safe_category else ""
+                summary_div = f"<div class='news-summary'>{safe_summary}</div>" if safe_summary else ""
+                time_div = f"<div class='news-time'>{_html.escape(time_str)}</div>" if time_str else ""
 
-            # 一括で注入（分割するとStreamlitが重くなるので）
-            BATCH = 25
-            for i in range(0, len(cards_html_parts), BATCH):
-                chunk = "\n".join(cards_html_parts[i:i + BATCH])
-                st.markdown(chunk, unsafe_allow_html=True)
+                cards_html_parts.append(
+                    f'<div class="news-card news-left-bar" style="border-left-color:{bg_color};">'
+                    f'<div class="news-card-header">'
+                    f'<span class="news-badge" style="background:{bg_color};color:{fg_color};">{icon} {safe_source}</span>'
+                    f'{cat_span}'
+                    f'<span class="news-age">{_html.escape(age)}</span>'
+                    f'</div>'
+                    f'<div class="news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
+                    f'{summary_div}{time_div}'
+                    f'</div>'
+                )
+
+            # 1件ずつ出力
+            for card in cards_html_parts:
+                st.markdown(card, unsafe_allow_html=True)
 
             # ページナビ（下部）
             if total_pages > 1:
@@ -1168,8 +1166,7 @@ with tab9:
                 safe_code = _html.escape(item.code) if item.code else ""
                 safe_cat = _html.escape(item.category)
                 safe_url = _html.escape(item.url) if item.url else ""
-                safe_age = _html.escape(item.age_str())
-                time_label = _html.escape(f"{item.time_str}")
+                time_label = _html.escape(item.time_str)
 
                 new_tag = '<span class="disc-new-tag">🔔 NEW</span>' if is_new else ""
                 card_class = "disc-card disc-left-bar disc-new" if is_new else "disc-card disc-left-bar"
@@ -1177,27 +1174,22 @@ with tab9:
 
                 title_html = f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a>' if safe_url else safe_title
 
-                card = f"""
-                <div class="{card_class}" style="border-left-color: {bg};">
-                  <div class="disc-header">
-                    <span class="disc-badge" style="background:{bg};color:{fg};">{safe_cat}</span>
-                    {code_tag}
-                    <span class="disc-company">{safe_company}</span>
-                    {new_tag}
-                    <span class="disc-time">{time_label}</span>
-                  </div>
-                  <div class="disc-title">
-                    {title_html}
-                  </div>
-                </div>
-                """
-                cards.append(card)
+                cards.append(
+                    f'<div class="{card_class}" style="border-left-color:{bg};">'
+                    f'<div class="disc-header">'
+                    f'<span class="disc-badge" style="background:{bg};color:{fg};">{safe_cat}</span>'
+                    f'{code_tag}'
+                    f'<span class="disc-company">{safe_company}</span>'
+                    f'{new_tag}'
+                    f'<span class="disc-time">{time_label}</span>'
+                    f'</div>'
+                    f'<div class="disc-title">{title_html}</div>'
+                    f'</div>'
+                )
 
-            # バッチレンダリング
-            BATCH = 25
-            for i in range(0, len(cards), BATCH):
-                chunk = "\n".join(cards[i:i + BATCH])
-                st.markdown(chunk, unsafe_allow_html=True)
+            # 1件ずつ st.markdown で出力
+            for card in cards:
+                st.markdown(card, unsafe_allow_html=True)
 
             # ページナビ（下部）
             if total_disc_pages > 1:
