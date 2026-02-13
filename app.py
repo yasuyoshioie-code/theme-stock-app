@@ -1188,9 +1188,9 @@ with tab11:
     if world_manual:
         _do_fetch_world()
 
-    # 自動更新
-    if world_auto_sec > 0:
-        last_ts = st.session_state.get("world_last_fetch_ts", 0)
+    # 自動更新（初回取得後のみ発動）
+    if world_auto_sec > 0 and "world_last_fetch_ts" in st.session_state:
+        last_ts = st.session_state["world_last_fetch_ts"]
         if _time.time() - last_ts >= world_auto_sec:
             _do_fetch_world()
 
@@ -1286,59 +1286,43 @@ with tab11:
             """
             st.markdown(_world_css, unsafe_allow_html=True)
 
-            current_region = ""
-            cards_html = ""
-            all_html = ""
+            # 地域ごとにグループ化
+            from itertools import groupby
+            for region, group_items in groupby(filtered, key=lambda x: x.region):
+                bg, fg = get_region_color(region)
+                st.markdown(
+                    f'<div class="world-section-title" style="background:{bg};color:{fg};">'
+                    f'{_html.escape(region)}</div>',
+                    unsafe_allow_html=True,
+                )
 
-            for item in filtered:
-                if item.region != current_region:
-                    # 前の地域のグリッドを閉じる
-                    if current_region:
-                        all_html += cards_html + "</div>"
+                cards = []
+                for item in group_items:
+                    if item.is_up:
+                        card_class = "world-card world-up"
+                        change_class = "up"
+                        arrow = "▲"
+                    elif item.is_down:
+                        card_class = "world-card world-down"
+                        change_class = "down"
+                        arrow = "▼"
+                    else:
+                        card_class = "world-card world-flat"
+                        change_class = "flat"
+                        arrow = "─"
 
-                    current_region = item.region
-                    bg, fg = get_region_color(current_region)
-                    all_html += f'<div class="world-section-title" style="background:{bg};color:{fg};">{_html.escape(current_region)}</div>'
-                    cards_html = '<div class="world-grid">'
+                    safe_name = _html.escape(item.name)
+                    safe_flag = _html.escape(item.flag)
 
-                # カード生成
-                if item.is_up:
-                    card_class = "world-card world-up"
-                    change_class = "up"
-                    arrow = "▲"
-                elif item.is_down:
-                    card_class = "world-card world-down"
-                    change_class = "down"
-                    arrow = "▼"
-                else:
-                    card_class = "world-card world-flat"
-                    change_class = "flat"
-                    arrow = "─"
+                    cards.append(f"""<div class="{card_class}">
+  <div class="world-name"><span>{safe_flag}</span> <span>{safe_name}</span></div>
+  <div class="world-value">{_html.escape(item.value_str)}</div>
+  <div class="world-change {change_class}">{arrow} {_html.escape(item.change_str)} ({_html.escape(item.change_pct_str)})</div>
+  <div class="world-time">{_html.escape(item.time_str)}</div>
+</div>""")
 
-                bg, fg = get_region_color(item.region)
-                safe_name = _html.escape(item.name)
-                safe_flag = _html.escape(item.flag)
-
-                card = f"""
-                <div class="{card_class}">
-                  <div class="world-name">
-                    <span>{safe_flag}</span>
-                    <span>{safe_name}</span>
-                  </div>
-                  <div class="world-value">{_html.escape(item.value_str)}</div>
-                  <div class="world-change {change_class}">
-                    {arrow} {_html.escape(item.change_str)} ({_html.escape(item.change_pct_str)})
-                  </div>
-                  <div class="world-time">{_html.escape(item.time_str)}</div>
-                </div>
-                """
-                cards_html += card
-
-            # 最後の地域のグリッドを閉じる
-            if current_region:
-                all_html += cards_html + "</div>"
-
-            st.markdown(all_html, unsafe_allow_html=True)
+                grid_html = '<div class="world-grid">' + "\n".join(cards) + '</div>'
+                st.markdown(grid_html, unsafe_allow_html=True)
         else:
             st.warning("データを取得できませんでした。")
     else:
