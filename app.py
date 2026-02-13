@@ -78,19 +78,39 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ブラウザ翻訳プロンプトを抑制（lang="ja" をHTMLに注入）
+# ブラウザ翻訳プロンプトを抑制（複数手法で確実に）
 st.markdown(
-    '<meta name="google" content="notranslate">',
+    """
+    <meta name="google" content="notranslate">
+    <meta http-equiv="Content-Language" content="ja">
+    <script>
+    (function(){
+      var h=document.documentElement;
+      h.setAttribute("lang","ja");
+      h.setAttribute("translate","no");
+      h.classList.add("notranslate");
+      var m=document.querySelector('meta[name="google"]');
+      if(!m){m=document.createElement("meta");m.name="google";document.head.appendChild(m);}
+      m.content="notranslate";
+    })();
+    </script>
+    """,
     unsafe_allow_html=True,
 )
 import streamlit.components.v1 as components
-components.html(
-    '<script>document.documentElement.lang="ja";</script>',
-    height=0,
-)
 
 # ===== みんかぶ風グローバルCSS =====
 _GLOBAL_CSS = """<style>
+/* ========== Chrome翻訳バー非表示 ========== */
+.goog-te-banner-frame, #goog-gt-tt, .goog-te-balloon-frame,
+.skiptranslate, #google_translate_element,
+div[id^="goog-gt-"], iframe.goog-te-menu-frame {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+body { top: 0 !important; }
 /* ========== みんかぶ風 基本設定 ========== */
 html, body, [class*="css"] {
   font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Yu Gothic",sans-serif;
