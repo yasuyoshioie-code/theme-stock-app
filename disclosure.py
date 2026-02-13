@@ -52,19 +52,19 @@ _CATEGORY_RULES: list[tuple[str, str]] = [
     (r"PR情報", "PR"),
 ]
 
-# 資料区分ごとの色
+# 資料区分ごとの色（みんかぶ風）
 CATEGORY_COLORS = {
-    "決算":     ("#1565C0", "#FFFFFF"),
-    "配当":     ("#2E7D32", "#FFFFFF"),
-    "業績修正": ("#E65100", "#FFFFFF"),
+    "決算":     ("#014099", "#FFFFFF"),
+    "配当":     ("#1B8A50", "#FFFFFF"),
+    "業績修正": ("#D84315", "#FFFFFF"),
     "株式":     ("#6A1B9A", "#FFFFFF"),
-    "自社株":   ("#6A1B9A", "#FFFFFF"),
-    "MBO":      ("#B71C1C", "#FFFFFF"),
-    "TOB":      ("#B71C1C", "#FFFFFF"),
-    "合併・再編": ("#B71C1C", "#FFFFFF"),
-    "提携":     ("#00838F", "#FFFFFF"),
+    "自社株":   ("#5C6BC0", "#FFFFFF"),
+    "MBO":      ("#C62828", "#FFFFFF"),
+    "TOB":      ("#C62828", "#FFFFFF"),
+    "合併・再編": ("#AD1457", "#FFFFFF"),
+    "提携":     ("#00695C", "#FFFFFF"),
     "役員":     ("#4E342E", "#FFFFFF"),
-    "追加訂正": ("#FF8F00", "#FFFFFF"),
+    "追加訂正": ("#EF6C00", "#FFFFFF"),
     "CG報告":   ("#37474F", "#FFFFFF"),
     "PR":       ("#78909C", "#FFFFFF"),
     "その他":   ("#757575", "#FFFFFF"),

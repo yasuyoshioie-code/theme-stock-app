@@ -637,30 +637,30 @@ def get_default_sources() -> list[str]:
     return [name for name, info in NEWS_SOURCES.items() if info["default"]]
 
 
-# ソース別カラー定義 (badge背景色, badge文字色)
+# ソース別カラー定義 (badge背景色, badge文字色) — みんかぶ風
 _SOURCE_COLORS = {
-    "moomoo":       ("#7C3AED", "#FFFFFF"),  # 紫
-    "cnbc":         ("#005594", "#FFFFFF"),  # 紺
-    "wsj":          ("#0274B6", "#FFFFFF"),  # 青
-    "四季報":       ("#E67E22", "#FFFFFF"),  # オレンジ
-    "東洋経済":     ("#C0392B", "#FFFFFF"),  # 赤
-    "ロイター":     ("#FF8200", "#FFFFFF"),  # オレンジ
-    "reuters":      ("#FF8200", "#FFFFFF"),
-    "ブルームバーグ": ("#2F54EB", "#FFFFFF"),  # 青
-    "bloomberg":    ("#2F54EB", "#FFFFFF"),
-    "日経":         ("#D32F2F", "#FFFFFF"),  # 赤
-    "nikkei":       ("#D32F2F", "#FFFFFF"),
-    "株探":         ("#27AE60", "#FFFFFF"),  # 緑
-    "kabutan":      ("#27AE60", "#FFFFFF"),
-    "かぶたん":     ("#27AE60", "#FFFFFF"),
-    "みんかぶ":     ("#F1C40F", "#333333"),  # 黄
-    "minkabu":      ("#F1C40F", "#333333"),
-    "google":       ("#757575", "#FFFFFF"),  # グレー
-    "時事通信":     ("#5B2C6F", "#FFFFFF"),  # 紫暗
-    "共同通信":     ("#1A5276", "#FFFFFF"),  # 紺暗
-    "fisco":        ("#2ECC71", "#FFFFFF"),  # 明緑
-    "フィスコ":     ("#2ECC71", "#FFFFFF"),
-    "trader":       ("#3498DB", "#FFFFFF"),  # 水色
+    "moomoo":       ("#6A1B9A", "#FFFFFF"),  # 紫
+    "cnbc":         ("#014099", "#FFFFFF"),  # ネイビー
+    "wsj":          ("#1565C0", "#FFFFFF"),  # 青
+    "四季報":       ("#D84315", "#FFFFFF"),  # オレンジ
+    "東洋経済":     ("#C62828", "#FFFFFF"),  # 赤
+    "ロイター":     ("#EF6C00", "#FFFFFF"),  # オレンジ
+    "reuters":      ("#EF6C00", "#FFFFFF"),
+    "ブルームバーグ": ("#1565C0", "#FFFFFF"),  # 青
+    "bloomberg":    ("#1565C0", "#FFFFFF"),
+    "日経":         ("#C62828", "#FFFFFF"),  # 赤
+    "nikkei":       ("#C62828", "#FFFFFF"),
+    "株探":         ("#1B8A50", "#FFFFFF"),  # 緑
+    "kabutan":      ("#1B8A50", "#FFFFFF"),
+    "かぶたん":     ("#1B8A50", "#FFFFFF"),
+    "みんかぶ":     ("#EF6C00", "#FFFFFF"),  # オレンジ
+    "minkabu":      ("#EF6C00", "#FFFFFF"),
+    "google":       ("#616161", "#FFFFFF"),  # グレー
+    "時事通信":     ("#4A148C", "#FFFFFF"),  # 紫暗
+    "共同通信":     ("#0D47A1", "#FFFFFF"),  # 紺暗
+    "fisco":        ("#1B8A50", "#FFFFFF"),  # 緑
+    "フィスコ":     ("#1B8A50", "#FFFFFF"),
+    "trader":       ("#0277BD", "#FFFFFF"),  # 水色
 }
 
 

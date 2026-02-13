@@ -2,8 +2,25 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# カラーパレット
-COLORS = px.colors.qualitative.Set2
+# みんかぶ風カラーパレット（ネイビー基調）
+COLORS = [
+    "#014099",  # ネイビー
+    "#1565C0",  # ブルー
+    "#1B8A50",  # グリーン
+    "#D84315",  # オレンジ
+    "#6A1B9A",  # パープル
+    "#00695C",  # ティール
+    "#C62828",  # レッド
+    "#EF6C00",  # アンバー
+    "#37474F",  # ブルーグレー
+    "#AD1457",  # ピンク
+    "#4527A0",  # ディープパープル
+    "#0277BD",  # ライトブルー
+]
+
+# 上昇=赤 / 下落=緑（日本式）
+COLOR_UP = "#F54545"
+COLOR_DOWN = "#1B8A50"
 
 
 def sector_bar_chart(summary: pd.DataFrame) -> go.Figure:
@@ -92,7 +109,7 @@ def momentum_bar_chart(ranking_df: pd.DataFrame) -> go.Figure:
 
     df = ranking_df.copy()
     colors = [
-        "#e74c3c" if s > 0 else "#3498db" for s in df["盛り上がりスコア"]
+        COLOR_UP if s > 0 else COLOR_DOWN for s in df["盛り上がりスコア"]
     ]
 
     fig = go.Figure(
@@ -125,7 +142,7 @@ def week_change_bar_chart(comparison_df: pd.DataFrame) -> go.Figure:
 
     df = comparison_df.sort_values("週間変化率(%)", ascending=True)
     colors = [
-        "#e74c3c" if v > 0 else "#3498db" for v in df["週間変化率(%)"]
+        COLOR_UP if v > 0 else COLOR_DOWN for v in df["週間変化率(%)"]
     ]
 
     fig = go.Figure(
@@ -157,7 +174,7 @@ def period_change_bar_chart(comparison_df: pd.DataFrame) -> go.Figure:
 
     df = comparison_df.sort_values("期間変化率(%)", ascending=True)
     colors = [
-        "#e74c3c" if v > 0 else "#3498db" for v in df["期間変化率(%)"]
+        COLOR_UP if v > 0 else COLOR_DOWN for v in df["期間変化率(%)"]
     ]
 
     fig = go.Figure(
@@ -274,7 +291,7 @@ def stock_momentum_bar_chart(
     df["label"] = df["銘柄名"] + " (" + df["銘柄コード"] + ")"
 
     colors = [
-        "#e74c3c" if s > 0 else "#3498db" for s in df["急騰スコア"]
+        COLOR_UP if s > 0 else COLOR_DOWN for s in df["急騰スコア"]
     ]
 
     fig = go.Figure(
@@ -329,9 +346,9 @@ def stock_change_heatmap(momentum_df: pd.DataFrame, top_n: int = 30) -> go.Figur
             x=["前日比", "週間変化", "月間変化", "vs平均"],
             y=y_labels,
             colorscale=[
-                [0, "#3498db"],
+                [0, COLOR_DOWN],
                 [0.5, "#ffffff"],
-                [1, "#e74c3c"],
+                [1, COLOR_UP],
             ],
             zmid=0,
             text=[[f"{v:+.1f}%" for v in row] for row in z_data],
@@ -390,7 +407,7 @@ def market_ranking_bar(
         values = pd.Series(range(len(plot_df), 0, -1))
 
     colors = [
-        "#e74c3c" if v > 0 else "#3498db" for v in values
+        COLOR_UP if v > 0 else COLOR_DOWN for v in values
     ]
 
     # テキストフォーマット

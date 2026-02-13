@@ -88,6 +88,213 @@ components.html(
     height=0,
 )
 
+# ===== みんかぶ風グローバルCSS =====
+_GLOBAL_CSS = """<style>
+/* --- Font --- */
+html, body, [class*="css"] {
+  font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Yu Gothic",sans-serif;
+}
+/* --- Header bar --- */
+header[data-testid="stHeader"] {
+  background: #014099 !important;
+  color: #FFF !important;
+}
+/* --- Tab styling --- */
+button[data-baseweb="tab"] {
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  color: #666 !important;
+  border-bottom: 2px solid transparent !important;
+  padding: 8px 16px !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+  color: #014099 !important;
+  border-bottom: 3px solid #014099 !important;
+  background: transparent !important;
+}
+/* --- Sidebar --- */
+section[data-testid="stSidebar"] {
+  background: #F7F8FA !important;
+  border-right: 1px solid #E5E5E5 !important;
+}
+section[data-testid="stSidebar"] .stMarkdown h1,
+section[data-testid="stSidebar"] .stMarkdown h2 {
+  color: #014099 !important;
+}
+/* --- Primary button --- */
+button[kind="primary"], .stButton>button[kind="primary"] {
+  background-color: #014099 !important;
+  border: none !important;
+  border-radius: 3px !important;
+}
+button[kind="primary"]:hover {
+  background-color: #3b82f6 !important;
+}
+/* --- Metric cards --- */
+div[data-testid="stMetric"] {
+  background: #F7F8FA;
+  border: 1px solid #E5E5E5;
+  border-radius: 3px;
+  padding: 12px;
+}
+div[data-testid="stMetricDelta"] svg { display: none; }
+/* --- Dataframes / Tables --- */
+div[data-testid="stDataFrame"] th {
+  background: #F0F0F0 !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+}
+/* --- Selectbox / Input --- */
+div[data-baseweb="select"] {
+  border-radius: 3px !important;
+}
+/* --- Success / Info / Warning boxes --- */
+div[data-testid="stAlert"] {
+  border-radius: 3px !important;
+  font-size: 13px !important;
+}
+/* --- Expander --- */
+details[data-testid="stExpander"] {
+  border: 1px solid #E5E5E5 !important;
+  border-radius: 3px !important;
+}
+/* --- Divider --- */
+hr {
+  border-color: #E5E5E5 !important;
+}
+/* --- みんかぶ共通カード --- */
+.mk-card {
+  border: 1px solid #E5E5E5;
+  border-radius: 3px;
+  padding: 10px 14px;
+  margin-bottom: 6px;
+  background: #FFF;
+  transition: background 0.15s;
+}
+.mk-card:hover { background: #FAFAFA; }
+.mk-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.mk-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mk-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.mk-title a { color: #333; text-decoration: none; }
+.mk-title a:hover { color: #014099; text-decoration: underline; }
+.mk-meta {
+  font-size: 11px;
+  color: #999;
+}
+.mk-company {
+  font-weight: 700;
+  font-size: 13px;
+  color: #333;
+}
+.mk-code {
+  font-size: 11px;
+  font-weight: 600;
+  color: #014099;
+  background: #EBF0F9;
+  padding: 0px 5px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+.mk-left-bar {
+  border-left: 3px solid;
+  padding-left: 12px;
+}
+.mk-summary {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.5;
+  margin-top: 2px;
+}
+/* --- みんかぶ世界の株価グリッド --- */
+.mk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.mk-index-card {
+  border: 1px solid #E5E5E5;
+  border-radius: 3px;
+  padding: 10px 12px;
+  background: #FFF;
+  transition: background 0.15s;
+}
+.mk-index-card:hover { background: #FAFAFA; }
+.mk-index-card.mk-up { border-left: 3px solid #F54545; }
+.mk-index-card.mk-down { border-left: 3px solid #1B8A50; }
+.mk-index-card.mk-flat { border-left: 3px solid #999; }
+.mk-idx-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mk-idx-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 2px 0;
+}
+.mk-idx-change { font-size: 13px; font-weight: 600; }
+.mk-idx-change.up { color: #F54545; }
+.mk-idx-change.down { color: #1B8A50; }
+.mk-idx-change.flat { color: #999; }
+.mk-idx-time { font-size: 10px; color: #999; margin-top: 2px; }
+.mk-section {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 12px 0 6px 0;
+  padding: 3px 10px;
+  border-radius: 3px;
+  display: inline-block;
+  color: #FFF;
+  background: #014099;
+}
+/* --- NEW tag animation --- */
+.mk-new-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  background: #F54545;
+  color: #FFF;
+  animation: mk-pulse 1.5s ease-in-out infinite;
+}
+@keyframes mk-pulse {
+  0%,100% { opacity:1; }
+  50% { opacity:0.5; }
+}
+/* --- Page nav --- */
+.mk-page-info {
+  text-align: center;
+  padding: 6px 0;
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+}
+</style>"""
+st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+
 st.title("テーマ株セクター 売買代金ダッシュボード")
 
 # --- サイドバー ---
@@ -735,85 +942,8 @@ with tab8:
                     st.session_state["news_page"] = total_pages
                     st.rerun()
 
-            # --- カードCSS ---
+            # --- カード描画 ---
             import html as _html
-
-            _news_css = """
-            <style>
-            .news-card {
-                border: 1px solid #e0e0e0;
-                border-radius: 10px;
-                padding: 14px 18px;
-                margin-bottom: 10px;
-                background: #fafafa;
-                transition: box-shadow 0.2s, border-color 0.2s;
-            }
-            .news-card:hover {
-                box-shadow: 0 2px 12px rgba(0,0,0,0.10);
-                border-color: #b0b0b0;
-            }
-            .news-card-header {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                margin-bottom: 6px;
-                flex-wrap: wrap;
-            }
-            .news-badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 12px;
-                font-size: 0.75em;
-                font-weight: 600;
-                letter-spacing: 0.02em;
-                white-space: nowrap;
-            }
-            .news-age {
-                color: #888;
-                font-size: 0.80em;
-                white-space: nowrap;
-            }
-            .news-category {
-                display: inline-block;
-                padding: 1px 8px;
-                border-radius: 8px;
-                font-size: 0.70em;
-                background: #ECEFF1;
-                color: #546E7A;
-                font-weight: 500;
-            }
-            .news-title {
-                font-size: 1.0em;
-                font-weight: 600;
-                line-height: 1.45;
-                margin-bottom: 4px;
-            }
-            .news-title a {
-                color: #1a1a1a;
-                text-decoration: none;
-            }
-            .news-title a:hover {
-                color: #1976D2;
-                text-decoration: underline;
-            }
-            .news-summary {
-                color: #666;
-                font-size: 0.85em;
-                line-height: 1.5;
-                margin-top: 2px;
-            }
-            .news-time {
-                color: #aaa;
-                font-size: 0.75em;
-                margin-top: 4px;
-            }
-            .news-left-bar {
-                border-left: 4px solid;
-                padding-left: 14px;
-            }
-            </style>
-            """
-            st.markdown(_news_css, unsafe_allow_html=True)
 
             # --- カード一括レンダリング ---
             cards_html_parts = []
@@ -832,18 +962,18 @@ with tab8:
                     safe_summary = _html.escape(s)
                 safe_category = _html.escape(item.category) if item.category else ""
 
-                cat_span = f"<span class='news-category'>{safe_category}</span>" if safe_category else ""
-                summary_div = f"<div class='news-summary'>{safe_summary}</div>" if safe_summary else ""
-                time_div = f"<div class='news-time'>{_html.escape(time_str)}</div>" if time_str else ""
+                cat_span = f'<span class="mk-badge" style="background:#ECEFF1;color:#546E7A;">{safe_category}</span>' if safe_category else ""
+                summary_div = f'<div class="mk-summary">{safe_summary}</div>' if safe_summary else ""
+                time_div = f'<div class="mk-meta" style="margin-top:4px;">{_html.escape(time_str)}</div>' if time_str else ""
 
                 cards_html_parts.append(
-                    f'<div class="news-card news-left-bar" style="border-left-color:{bg_color};">'
-                    f'<div class="news-card-header">'
-                    f'<span class="news-badge" style="background:{bg_color};color:{fg_color};">{icon} {safe_source}</span>'
+                    f'<div class="mk-card mk-left-bar" style="border-left-color:{bg_color};">'
+                    f'<div class="mk-card-header">'
+                    f'<span class="mk-badge" style="background:{bg_color};color:{fg_color};">{icon} {safe_source}</span>'
                     f'{cat_span}'
-                    f'<span class="news-age">{_html.escape(age)}</span>'
+                    f'<span class="mk-meta">{_html.escape(age)}</span>'
                     f'</div>'
-                    f'<div class="news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
+                    f'<div class="mk-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
                     f'{summary_div}{time_div}'
                     f'</div>'
                 )
@@ -1066,96 +1196,6 @@ with tab9:
 
             import html as _html
 
-            # 開示カードCSS
-            _disc_css = """
-            <style>
-            .disc-card {
-                border: 1px solid #e0e0e0;
-                border-radius: 10px;
-                padding: 12px 16px;
-                margin-bottom: 8px;
-                background: #fafafa;
-                transition: box-shadow 0.2s, border-color 0.2s;
-            }
-            .disc-card:hover {
-                box-shadow: 0 2px 12px rgba(0,0,0,0.10);
-                border-color: #b0b0b0;
-            }
-            .disc-card.disc-new {
-                background: #FFF8E1;
-                border-color: #FFB300;
-                border-width: 2px;
-            }
-            .disc-header {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                margin-bottom: 6px;
-                flex-wrap: wrap;
-            }
-            .disc-badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 12px;
-                font-size: 0.75em;
-                font-weight: 600;
-                white-space: nowrap;
-            }
-            .disc-new-tag {
-                display: inline-block;
-                padding: 2px 8px;
-                border-radius: 8px;
-                font-size: 0.70em;
-                font-weight: 700;
-                background: #FF6F00;
-                color: #FFF;
-                animation: disc-pulse 1.5s ease-in-out infinite;
-            }
-            @keyframes disc-pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.6; }
-            }
-            .disc-time {
-                color: #888;
-                font-size: 0.80em;
-                white-space: nowrap;
-            }
-            .disc-company {
-                font-weight: 700;
-                font-size: 0.90em;
-                color: #333;
-            }
-            .disc-title {
-                font-size: 0.95em;
-                font-weight: 500;
-                line-height: 1.45;
-                margin-top: 4px;
-            }
-            .disc-title a {
-                color: #1a1a1a;
-                text-decoration: none;
-            }
-            .disc-title a:hover {
-                color: #1565C0;
-                text-decoration: underline;
-            }
-            .disc-code {
-                font-size: 0.75em;
-                font-weight: 600;
-                color: #1976D2;
-                background: #E3F2FD;
-                padding: 1px 6px;
-                border-radius: 4px;
-                font-family: monospace;
-            }
-            .disc-left-bar {
-                border-left: 4px solid;
-                padding-left: 14px;
-            }
-            </style>
-            """
-            st.markdown(_disc_css, unsafe_allow_html=True)
-
             cards = []
             for item in display_disc:
                 bg, fg = get_category_color(item.category)
@@ -1168,22 +1208,22 @@ with tab9:
                 safe_url = _html.escape(item.url) if item.url else ""
                 time_label = _html.escape(item.time_str)
 
-                new_tag = '<span class="disc-new-tag">🔔 NEW</span>' if is_new else ""
-                card_class = "disc-card disc-left-bar disc-new" if is_new else "disc-card disc-left-bar"
-                code_tag = f'<span class="disc-code">{safe_code}</span>' if safe_code else ""
+                new_tag = '<span class="mk-new-tag">🔔 NEW</span>' if is_new else ""
+                new_bg = "background:#FFF8E1;border-color:#FFB300;border-width:2px;" if is_new else ""
+                code_tag = f'<span class="mk-code">{safe_code}</span>' if safe_code else ""
 
                 title_html = f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a>' if safe_url else safe_title
 
                 cards.append(
-                    f'<div class="{card_class}" style="border-left-color:{bg};">'
-                    f'<div class="disc-header">'
-                    f'<span class="disc-badge" style="background:{bg};color:{fg};">{safe_cat}</span>'
+                    f'<div class="mk-card mk-left-bar" style="border-left-color:{bg};{new_bg}">'
+                    f'<div class="mk-card-header">'
+                    f'<span class="mk-badge" style="background:{bg};color:{fg};">{safe_cat}</span>'
                     f'{code_tag}'
-                    f'<span class="disc-company">{safe_company}</span>'
+                    f'<span class="mk-company">{safe_company}</span>'
                     f'{new_tag}'
-                    f'<span class="disc-time">{time_label}</span>'
+                    f'<span class="mk-meta">{time_label}</span>'
                     f'</div>'
-                    f'<div class="disc-title">{title_html}</div>'
+                    f'<div class="mk-title">{title_html}</div>'
                     f'</div>'
                 )
 
@@ -1288,116 +1328,42 @@ with tab11:
 
             import html as _html
 
-            # CSS
-            _world_css = """
-            <style>
-            .world-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                gap: 10px;
-                margin-bottom: 16px;
-            }
-            .world-card {
-                border: 1px solid #e0e0e0;
-                border-radius: 10px;
-                padding: 12px 16px;
-                background: #fafafa;
-                transition: box-shadow 0.2s;
-            }
-            .world-card:hover {
-                box-shadow: 0 2px 12px rgba(0,0,0,0.10);
-            }
-            .world-card.world-up {
-                border-left: 4px solid #EF5350;
-            }
-            .world-card.world-down {
-                border-left: 4px solid #26A69A;
-            }
-            .world-card.world-flat {
-                border-left: 4px solid #9E9E9E;
-            }
-            .world-name {
-                font-size: 0.85em;
-                font-weight: 600;
-                color: #333;
-                margin-bottom: 4px;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }
-            .world-region-badge {
-                display: inline-block;
-                padding: 1px 6px;
-                border-radius: 8px;
-                font-size: 0.65em;
-                font-weight: 600;
-            }
-            .world-value {
-                font-size: 1.35em;
-                font-weight: 700;
-                color: #1a1a1a;
-                margin: 4px 0;
-            }
-            .world-change {
-                font-size: 0.90em;
-                font-weight: 600;
-            }
-            .world-change.up { color: #EF5350; }
-            .world-change.down { color: #26A69A; }
-            .world-change.flat { color: #9E9E9E; }
-            .world-time {
-                font-size: 0.70em;
-                color: #aaa;
-                margin-top: 4px;
-            }
-            .world-section-title {
-                font-size: 1.1em;
-                font-weight: 700;
-                margin: 16px 0 8px 0;
-                padding: 4px 12px;
-                border-radius: 6px;
-                display: inline-block;
-            }
-            </style>
-            """
-            st.markdown(_world_css, unsafe_allow_html=True)
-
             # 地域ごとにグループ化
             from itertools import groupby
             for region, group_items in groupby(filtered, key=lambda x: x.region):
-                bg, fg = get_region_color(region)
                 st.markdown(
-                    f'<div class="world-section-title" style="background:{bg};color:{fg};">'
-                    f'{_html.escape(region)}</div>',
+                    f'<div class="mk-section">{_html.escape(region)}</div>',
                     unsafe_allow_html=True,
                 )
 
                 cards = []
                 for item in group_items:
                     if item.is_up:
-                        card_class = "world-card world-up"
+                        card_class = "mk-index-card mk-up"
                         change_class = "up"
                         arrow = "▲"
                     elif item.is_down:
-                        card_class = "world-card world-down"
+                        card_class = "mk-index-card mk-down"
                         change_class = "down"
                         arrow = "▼"
                     else:
-                        card_class = "world-card world-flat"
+                        card_class = "mk-index-card mk-flat"
                         change_class = "flat"
                         arrow = "─"
 
                     safe_name = _html.escape(item.name)
                     safe_flag = _html.escape(item.flag)
 
-                    cards.append(f"""<div class="{card_class}">
-  <div class="world-name"><span>{safe_flag}</span> <span>{safe_name}</span></div>
-  <div class="world-value">{_html.escape(item.value_str)}</div>
-  <div class="world-change {change_class}">{arrow} {_html.escape(item.change_str)} ({_html.escape(item.change_pct_str)})</div>
-  <div class="world-time">{_html.escape(item.time_str)}</div>
-</div>""")
+                    cards.append(
+                        f'<div class="{card_class}">'
+                        f'<div class="mk-idx-name"><span>{safe_flag}</span> <span>{safe_name}</span></div>'
+                        f'<div class="mk-idx-value">{_html.escape(item.value_str)}</div>'
+                        f'<div class="mk-idx-change {change_class}">{arrow} {_html.escape(item.change_str)} ({_html.escape(item.change_pct_str)})</div>'
+                        f'<div class="mk-idx-time">{_html.escape(item.time_str)}</div>'
+                        f'</div>'
+                    )
 
-                grid_html = '<div class="world-grid">' + "\n".join(cards) + '</div>'
+                grid_html = '<div class="mk-grid">' + "".join(cards) + '</div>'
                 st.markdown(grid_html, unsafe_allow_html=True)
         else:
             st.warning("データを取得できませんでした。")
