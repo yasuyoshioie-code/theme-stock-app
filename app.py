@@ -75,6 +75,7 @@ st.set_page_config(
     page_title="テーマ株セクター 売買代金ダッシュボード",
     page_icon="📊",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 # ブラウザ翻訳プロンプトを抑制（lang="ja" をHTMLに注入）
@@ -134,6 +135,12 @@ h2, h3 {
 }
 h2 { font-size: 18px !important; }
 h3 { font-size: 15px !important; }
+/* --- Main content: ワンカラム風 --- */
+.stMainBlockContainer {
+  max-width: 1100px !important;
+  margin: 0 auto !important;
+  padding: 1rem 2rem !important;
+}
 /* --- Sidebar --- */
 section[data-testid="stSidebar"] {
   background: #F7F8FA !important;
@@ -206,76 +213,141 @@ hr {
 /* ========== ニュース: みんかぶ風リスト ========== */
 .mk-news-item {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 0;
+  align-items: baseline;
+  gap: 0;
+  padding: 9px 0;
   border-bottom: 1px solid #F0F0F0;
   transition: background 0.15s;
 }
-.mk-news-item:hover { background: #FAFBFC; margin: 0 -8px; padding: 10px 8px; }
-.mk-news-time {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: #999;
-  min-width: 42px;
-  padding-top: 2px;
-  font-family: "SF Mono","Monaco","Menlo",monospace;
-}
+.mk-news-item:hover { background: #F8F9FB; }
 .mk-news-body { flex: 1; min-width: 0; }
 .mk-news-title {
   font-size: 14px;
   font-weight: 500;
-  line-height: 1.55;
+  line-height: 1.5;
   color: #333;
 }
 .mk-news-title a { color: #333; text-decoration: none; }
 .mk-news-title a:hover { color: #014099; }
+.mk-news-time {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #999;
+  white-space: nowrap;
+  margin-left: 16px;
+  min-width: 100px;
+  text-align: right;
+}
 .mk-news-tags {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 3px;
   flex-wrap: wrap;
 }
 .mk-tag {
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 500;
   background: #F0F0F0;
   color: #666;
   white-space: nowrap;
+  border: 1px solid #E5E5E5;
+  cursor: pointer;
+  transition: all 0.15s;
 }
+.mk-tag:hover { background: #E8E8E8; }
 .mk-tag-source {
   background: #EBF0F9;
   color: #014099;
+  border-color: #D0DDEF;
 }
+.mk-tag-source:hover { background: #D8E4F5; }
 .mk-news-headline {
-  border-left: 3px solid #014099;
-  padding-left: 12px;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  padding: 0 0 16px 0;
+  margin-bottom: 8px;
   border-bottom: 1px solid #E5E5E5;
 }
 .mk-news-headline .mk-news-title {
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 700;
+  line-height: 1.5;
+}
+.mk-news-headline .mk-news-title a { color: #014099; }
+.mk-news-headline .mk-news-title a:hover { text-decoration: underline; }
+.mk-news-hl-time {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 6px;
 }
 .mk-news-summary {
-  font-size: 12px;
-  color: #666;
-  line-height: 1.55;
-  margin-top: 4px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.65;
+  margin-top: 6px;
 }
 .mk-news-age {
   font-size: 11px;
   color: #B0B0B0;
 }
+.mk-news-new {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  background: #F54545;
+  color: #FFF;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+/* --- 指数ティッカーバー --- */
+.mk-ticker-bar {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  background: #F7F8FA;
+  border: 1px solid #E5E5E5;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  padding: 0;
+}
+.mk-ticker-bar::-webkit-scrollbar { height: 4px; }
+.mk-ticker-bar::-webkit-scrollbar-thumb { background: #CCC; border-radius: 2px; }
+.mk-ticker-item {
+  flex: 1;
+  min-width: 140px;
+  padding: 10px 14px;
+  text-align: center;
+  border-right: 1px solid #E5E5E5;
+  transition: background 0.15s;
+}
+.mk-ticker-item:last-child { border-right: none; }
+.mk-ticker-item:hover { background: #EFF2F7; }
+.mk-ticker-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #014099;
+  margin-bottom: 2px;
+}
+.mk-ticker-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+.mk-ticker-sub {
+  font-size: 10px;
+  color: #999;
+}
+.mk-ticker-change {
+  font-size: 12px;
+  font-weight: 600;
+}
+.mk-ticker-change.up { color: #F54545; }
+.mk-ticker-change.down { color: #1B8A50; }
+.mk-ticker-change.flat { color: #999; }
 
 /* ========== 適時開示: みんかぶ風カード ========== */
 .mk-card {
@@ -426,6 +498,36 @@ hr {
 st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
 
 st.title("テーマ株セクター 売買代金ダッシュボード")
+
+# --- みんかぶ風 指数ティッカーバー ---
+# 世界の株価データがあればヘッダー下にティッカー表示
+if "world_items" in st.session_state:
+    _ticker_indices = ["日経平均", "TOPIX", "NYダウ", "S&P500", "ドル/円", "ユーロ/円", "ビットコイン/円"]
+    _ticker_data = []
+    for wi in st.session_state["world_items"]:
+        for tname in _ticker_indices:
+            if tname in wi.name:
+                _ticker_data.append(wi)
+                break
+    if _ticker_data:
+        import html as _ticker_html
+        _ticker_parts = []
+        for ti in _ticker_data[:7]:
+            if ti.is_up:
+                chg_class = "up"
+            elif ti.is_down:
+                chg_class = "down"
+            else:
+                chg_class = "flat"
+            _ticker_parts.append(
+                f'<div class="mk-ticker-item">'
+                f'<div class="mk-ticker-name">{_ticker_html.escape(ti.name)}</div>'
+                f'<div class="mk-ticker-value">{_ticker_html.escape(ti.value_str)}'
+                f'<span class="mk-ticker-sub">({_ticker_html.escape(ti.time_str)})</span></div>'
+                f'<div class="mk-ticker-change {chg_class}">{_ticker_html.escape(ti.change_str)} ({_ticker_html.escape(ti.change_pct_str)})</div>'
+                f'</div>'
+            )
+        st.markdown('<div class="mk-ticker-bar">' + "".join(_ticker_parts) + '</div>', unsafe_allow_html=True)
 
 # --- サイドバー ---
 with st.sidebar:
@@ -1075,28 +1177,28 @@ with tab8:
             # --- みんかぶ風ニュースリスト描画 ---
             import html as _html
 
-            # ヘッドライン（最初の3件は大きめ表示）
-            headline_count = min(3, len(display_items))
-            for idx, item in enumerate(display_items[:headline_count]):
+            # ヘッドライン（最初の1件は大きめ表示 — みんかぶ風）
+            if display_items:
+                item = display_items[0]
                 safe_title = _html.escape(item.title)
                 safe_url = _html.escape(item.url)
                 safe_source = _html.escape(item.source)
                 safe_summary = ""
                 if item.summary:
-                    s = item.summary[:120] + ("..." if len(item.summary) > 120 else "")
+                    s = item.summary[:200] + ("..." if len(item.summary) > 200 else "")
                     safe_summary = _html.escape(s)
                 safe_category = _html.escape(item.category) if item.category else ""
-                age = _html.escape(item.age_str())
+                time_str = _html.escape(item.published_str()) if item.published_str() else _html.escape(item.age_str())
 
                 cat_tags = ""
                 if safe_category:
                     cat_tags += f'<span class="mk-tag">{safe_category}</span>'
                 cat_tags += f'<span class="mk-tag mk-tag-source">{safe_source}</span>'
-                cat_tags += f'<span class="mk-news-age">{age}</span>'
                 summary_html = f'<div class="mk-news-summary">{safe_summary}</div>' if safe_summary else ""
 
                 st.markdown(
                     f'<div class="mk-news-headline">'
+                    f'<div class="mk-news-hl-time">{time_str}</div>'
                     f'<div class="mk-news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
                     f'{summary_html}'
                     f'<div class="mk-news-tags">{cat_tags}</div>'
@@ -1104,29 +1206,23 @@ with tab8:
                     unsafe_allow_html=True,
                 )
 
-            # 残りのニュース（みんかぶ風シンプルリスト: 時刻 | タイトル | タグ）
-            for idx, item in enumerate(display_items[headline_count:]):
+            # 残りのニュース（みんかぶ風: タイトル左 — 時刻右端）
+            for idx, item in enumerate(display_items[1:]):
                 safe_title = _html.escape(item.title)
                 safe_url = _html.escape(item.url)
-                safe_source = _html.escape(item.source)
-                safe_category = _html.escape(item.category) if item.category else ""
                 age = _html.escape(item.age_str())
+                time_str = _html.escape(item.published_str()) if item.published_str() else age
+                time_display = f"今日 {time_str.split(' ')[-1]}" if ' ' in time_str else time_str
 
-                # 時刻 (HH:MM or "○分前")
-                time_label = age if age else ""
-
-                cat_tags = ""
-                if safe_category:
-                    cat_tags += f'<span class="mk-tag">{safe_category}</span>'
-                cat_tags += f'<span class="mk-tag mk-tag-source">{safe_source}</span>'
+                # 新着は5分以内
+                new_tag = '<span class="mk-news-new">NEW</span>' if age in ("たった今", "1分前", "2分前", "3分前", "4分前", "5分前") else ""
 
                 st.markdown(
                     f'<div class="mk-news-item">'
-                    f'<div class="mk-news-time">{time_label}</div>'
                     f'<div class="mk-news-body">'
-                    f'<div class="mk-news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
-                    f'<div class="mk-news-tags">{cat_tags}</div>'
+                    f'<div class="mk-news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a>{new_tag}</div>'
                     f'</div>'
+                    f'<div class="mk-news-time">{time_display}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
