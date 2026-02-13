@@ -1236,12 +1236,12 @@ with tab11:
     # 設定行
     col_w1, col_w2 = st.columns([1, 1])
     with col_w1:
-        world_manual = st.button("📡 世界の株価を取得", key="fetch_world", type="primary", use_container_width=True)
+        world_manual = st.button("🔄 今すぐ更新", key="fetch_world", type="primary", use_container_width=True)
     with col_w2:
         world_auto_interval = st.selectbox(
             "自動更新間隔",
-            [("OFF", 0), ("30秒", 30), ("1分", 60), ("3分", 180), ("5分", 300)],
-            index=2,  # デフォルト: 1分
+            [("10秒", 10), ("30秒", 30), ("1分", 60), ("3分", 180), ("OFF", 0)],
+            index=0,  # デフォルト: 10秒
             format_func=lambda x: x[0],
             key="world_auto_interval",
         )
@@ -1257,27 +1257,24 @@ with tab11:
 
     # 取得処理
     def _do_fetch_world():
-        with st.spinner("世界の株価を取得中..."):
-            items = fetch_world_indices()
+        items = fetch_world_indices()
         st.session_state["world_items"] = items
         st.session_state["world_fetched_at"] = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         st.session_state["world_last_fetch_ts"] = _time.time()
 
+    # 手動更新
     if world_manual:
         _do_fetch_world()
 
-    # 自動更新（初回取得後のみ発動）
+    # 初回アクセス時に自動取得（ボタン不要）
+    if "world_items" not in st.session_state:
+        _do_fetch_world()
+
+    # 自動更新
     if world_auto_sec > 0 and "world_last_fetch_ts" in st.session_state:
         last_ts = st.session_state["world_last_fetch_ts"]
         if _time.time() - last_ts >= world_auto_sec:
             _do_fetch_world()
-
-    # タイマー
-    if world_auto_sec > 0 and "world_last_fetch_ts" in st.session_state:
-        remaining = int(st.session_state["world_last_fetch_ts"] + world_auto_sec - _time.time())
-        if remaining > 0:
-            mins, secs = divmod(remaining, 60)
-            st.info(f"🔄 自動更新ON（{world_auto_interval[0]}間隔） — 次回更新まで {mins}分{secs}秒")
 
     # 表示
     if "world_items" in st.session_state:
@@ -1286,7 +1283,8 @@ with tab11:
 
         if items:
             filtered = [it for it in items if it.region in selected_regions]
-            st.success(f"取得指標数: {len(filtered)}件 | 取得時刻: {fetched_at}")
+            auto_label = f"🔄 {world_auto_interval[0]}で自動更新中" if world_auto_sec > 0 else "自動更新OFF"
+            st.success(f"📡 {len(filtered)}件 | {fetched_at} 更新 | {auto_label}")
 
             import html as _html
 
@@ -1404,10 +1402,10 @@ with tab11:
         else:
             st.warning("データを取得できませんでした。")
     else:
-        st.info("👆「📡 世界の株価を取得」ボタンを押してください。")
+        st.info("⏳ データを読み込み中...")
 
-    # 自動更新: st_autorefresh
-    if world_auto_sec > 0 and "world_last_fetch_ts" in st.session_state:
+    # 自動更新: st_autorefresh（常時有効）
+    if world_auto_sec > 0:
         from streamlit_autorefresh import st_autorefresh
         st_autorefresh(
             interval=world_auto_sec * 1000,
