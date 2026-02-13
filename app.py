@@ -960,6 +960,7 @@ with tab9:
         st.session_state["disc_items"] = items
         st.session_state["disc_fetched_at"] = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         st.session_state["disc_last_fetch_ts"] = _time.time()
+        st.session_state["disc_page"] = 1  # ページリセット
 
     # 手動取得
     if disc_manual:
@@ -1016,7 +1017,54 @@ with tab9:
                 q = search_company.strip()
                 filtered = [it for it in filtered if q in it.company or q in it.title]
 
-            st.markdown(f"**表示中: {len(filtered)}件 / 全{len(items)}件**")
+            # --- ページネーション設定 ---
+            disc_per_page = st.selectbox(
+                "1ページ表示件数", [50, 100, 200], index=1, key="disc_per_page",
+            )
+            total_disc_items = len(filtered)
+            total_disc_pages = max(1, -(-total_disc_items // disc_per_page))  # ceil
+
+            # フィルタ変更時にページリセット
+            disc_filter_key = f"{filter_cat}_{search_company}"
+            if st.session_state.get("_disc_filter_key") != disc_filter_key:
+                st.session_state["disc_page"] = 1
+                st.session_state["_disc_filter_key"] = disc_filter_key
+
+            disc_current_page = st.session_state.get("disc_page", 1)
+            disc_current_page = max(1, min(disc_current_page, total_disc_pages))
+            st.session_state["disc_page"] = disc_current_page
+
+            disc_start = (disc_current_page - 1) * disc_per_page
+            disc_end = min(disc_start + disc_per_page, total_disc_items)
+            display_disc = filtered[disc_start:disc_end]
+
+            st.markdown(f"**表示中: {disc_start+1}〜{disc_end}件 / 全{total_disc_items}件（{len(items)}件中）**")
+
+            # ページナビ（上部）
+            if total_disc_pages > 1:
+                col_dp1, col_dp2, col_dp3, col_dp4, col_dp5 = st.columns([1, 1, 2, 1, 1])
+                with col_dp1:
+                    if st.button("⏮ 最初", key="disc_pg_first", disabled=(disc_current_page <= 1), use_container_width=True):
+                        st.session_state["disc_page"] = 1
+                        st.rerun()
+                with col_dp2:
+                    if st.button("◀ 前へ", key="disc_pg_prev", disabled=(disc_current_page <= 1), use_container_width=True):
+                        st.session_state["disc_page"] = disc_current_page - 1
+                        st.rerun()
+                with col_dp3:
+                    st.markdown(
+                        f"<div style='text-align:center;padding:8px 0;font-weight:600;'>"
+                        f"📄 {disc_current_page} / {total_disc_pages} ページ</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_dp4:
+                    if st.button("次へ ▶", key="disc_pg_next", disabled=(disc_current_page >= total_disc_pages), use_container_width=True):
+                        st.session_state["disc_page"] = disc_current_page + 1
+                        st.rerun()
+                with col_dp5:
+                    if st.button("最後 ⏭", key="disc_pg_last", disabled=(disc_current_page >= total_disc_pages), use_container_width=True):
+                        st.session_state["disc_page"] = total_disc_pages
+                        st.rerun()
 
             import html as _html
 
@@ -1102,7 +1150,7 @@ with tab9:
             st.markdown(_disc_css, unsafe_allow_html=True)
 
             cards = []
-            for item in filtered:
+            for item in display_disc:
                 bg, fg = get_category_color(item.category)
                 is_new = item.unique_key in new_keys
 
@@ -1138,6 +1186,32 @@ with tab9:
             for i in range(0, len(cards), BATCH):
                 chunk = "\n".join(cards[i:i + BATCH])
                 st.markdown(chunk, unsafe_allow_html=True)
+
+            # ページナビ（下部）
+            if total_disc_pages > 1:
+                col_dbp1, col_dbp2, col_dbp3, col_dbp4, col_dbp5 = st.columns([1, 1, 2, 1, 1])
+                with col_dbp1:
+                    if st.button("⏮ 最初", key="disc_bpg_first", disabled=(disc_current_page <= 1), use_container_width=True):
+                        st.session_state["disc_page"] = 1
+                        st.rerun()
+                with col_dbp2:
+                    if st.button("◀ 前へ", key="disc_bpg_prev", disabled=(disc_current_page <= 1), use_container_width=True):
+                        st.session_state["disc_page"] = disc_current_page - 1
+                        st.rerun()
+                with col_dbp3:
+                    st.markdown(
+                        f"<div style='text-align:center;padding:8px 0;font-weight:600;'>"
+                        f"📄 {disc_current_page} / {total_disc_pages} ページ</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_dbp4:
+                    if st.button("次へ ▶", key="disc_bpg_next", disabled=(disc_current_page >= total_disc_pages), use_container_width=True):
+                        st.session_state["disc_page"] = disc_current_page + 1
+                        st.rerun()
+                with col_dbp5:
+                    if st.button("最後 ⏭", key="disc_bpg_last", disabled=(disc_current_page >= total_disc_pages), use_container_width=True):
+                        st.session_state["disc_page"] = total_disc_pages
+                        st.rerun()
         else:
             st.warning("適時開示データを取得できませんでした。")
 
