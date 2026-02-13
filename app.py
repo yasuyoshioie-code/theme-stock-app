@@ -64,6 +64,11 @@ from shikiho_csv import (
     stock_price_summary,
     watchlist_profit_chart,
 )
+from world_indices import (
+    fetch_world_indices,
+    get_region_color,
+    REGION_ORDER,
+)
 
 st.set_page_config(
     page_title="テーマ株セクター 売買代金ダッシュボード",
@@ -274,8 +279,8 @@ if st.session_state.get("fetch_triggered"):
 
 # --- タブ表示 ---
 # ニュース・市場ランキングは常に表示、売買代金系はデータ取得後に表示
-tab8, tab9, tab10, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📰 ニュース", "📋 適時開示", "📙 四季報CSV", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
+tab8, tab9, tab11, tab10, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📰 ニュース", "📋 適時開示", "🌏 世界の株価", "📙 四季報CSV", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
 )
 
 _NEED_DATA_MSG = "⬆️ 上の「📈 売買代金データを取得」ボタンを押してデータを取得してください。"
@@ -1142,6 +1147,209 @@ with tab9:
             interval=disc_auto_sec * 1000,
             limit=None,
             key="disc_autorefresh",
+        )
+
+# ===== タブ11: 世界の株価 =====
+with tab11:
+    st.subheader("🌏 世界の株価・為替・商品")
+    st.caption("日経平均・NYダウ・為替・商品・仮想通貨のリアルタイムデータ")
+
+    # 設定行
+    col_w1, col_w2 = st.columns([1, 1])
+    with col_w1:
+        world_manual = st.button("📡 世界の株価を取得", key="fetch_world", type="primary", use_container_width=True)
+    with col_w2:
+        world_auto_interval = st.selectbox(
+            "自動更新間隔",
+            [("OFF", 0), ("30秒", 30), ("1分", 60), ("3分", 180), ("5分", 300)],
+            index=2,  # デフォルト: 1分
+            format_func=lambda x: x[0],
+            key="world_auto_interval",
+        )
+        world_auto_sec = world_auto_interval[1]
+
+    # 地域フィルタ
+    selected_regions = st.multiselect(
+        "表示する地域",
+        options=REGION_ORDER,
+        default=REGION_ORDER,
+        key="world_regions",
+    )
+
+    # 取得処理
+    def _do_fetch_world():
+        with st.spinner("世界の株価を取得中..."):
+            items = fetch_world_indices()
+        st.session_state["world_items"] = items
+        st.session_state["world_fetched_at"] = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        st.session_state["world_last_fetch_ts"] = _time.time()
+
+    if world_manual:
+        _do_fetch_world()
+
+    # 自動更新
+    if world_auto_sec > 0:
+        last_ts = st.session_state.get("world_last_fetch_ts", 0)
+        if _time.time() - last_ts >= world_auto_sec:
+            _do_fetch_world()
+
+    # タイマー
+    if world_auto_sec > 0 and "world_last_fetch_ts" in st.session_state:
+        remaining = int(st.session_state["world_last_fetch_ts"] + world_auto_sec - _time.time())
+        if remaining > 0:
+            mins, secs = divmod(remaining, 60)
+            st.info(f"🔄 自動更新ON（{world_auto_interval[0]}間隔） — 次回更新まで {mins}分{secs}秒")
+
+    # 表示
+    if "world_items" in st.session_state:
+        items = st.session_state["world_items"]
+        fetched_at = st.session_state.get("world_fetched_at", "")
+
+        if items:
+            filtered = [it for it in items if it.region in selected_regions]
+            st.success(f"取得指標数: {len(filtered)}件 | 取得時刻: {fetched_at}")
+
+            import html as _html
+
+            # CSS
+            _world_css = """
+            <style>
+            .world-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: 10px;
+                margin-bottom: 16px;
+            }
+            .world-card {
+                border: 1px solid #e0e0e0;
+                border-radius: 10px;
+                padding: 12px 16px;
+                background: #fafafa;
+                transition: box-shadow 0.2s;
+            }
+            .world-card:hover {
+                box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+            }
+            .world-card.world-up {
+                border-left: 4px solid #EF5350;
+            }
+            .world-card.world-down {
+                border-left: 4px solid #26A69A;
+            }
+            .world-card.world-flat {
+                border-left: 4px solid #9E9E9E;
+            }
+            .world-name {
+                font-size: 0.85em;
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 4px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .world-region-badge {
+                display: inline-block;
+                padding: 1px 6px;
+                border-radius: 8px;
+                font-size: 0.65em;
+                font-weight: 600;
+            }
+            .world-value {
+                font-size: 1.35em;
+                font-weight: 700;
+                color: #1a1a1a;
+                margin: 4px 0;
+            }
+            .world-change {
+                font-size: 0.90em;
+                font-weight: 600;
+            }
+            .world-change.up { color: #EF5350; }
+            .world-change.down { color: #26A69A; }
+            .world-change.flat { color: #9E9E9E; }
+            .world-time {
+                font-size: 0.70em;
+                color: #aaa;
+                margin-top: 4px;
+            }
+            .world-section-title {
+                font-size: 1.1em;
+                font-weight: 700;
+                margin: 16px 0 8px 0;
+                padding: 4px 12px;
+                border-radius: 6px;
+                display: inline-block;
+            }
+            </style>
+            """
+            st.markdown(_world_css, unsafe_allow_html=True)
+
+            current_region = ""
+            cards_html = ""
+            all_html = ""
+
+            for item in filtered:
+                if item.region != current_region:
+                    # 前の地域のグリッドを閉じる
+                    if current_region:
+                        all_html += cards_html + "</div>"
+
+                    current_region = item.region
+                    bg, fg = get_region_color(current_region)
+                    all_html += f'<div class="world-section-title" style="background:{bg};color:{fg};">{_html.escape(current_region)}</div>'
+                    cards_html = '<div class="world-grid">'
+
+                # カード生成
+                if item.is_up:
+                    card_class = "world-card world-up"
+                    change_class = "up"
+                    arrow = "▲"
+                elif item.is_down:
+                    card_class = "world-card world-down"
+                    change_class = "down"
+                    arrow = "▼"
+                else:
+                    card_class = "world-card world-flat"
+                    change_class = "flat"
+                    arrow = "─"
+
+                bg, fg = get_region_color(item.region)
+                safe_name = _html.escape(item.name)
+                safe_flag = _html.escape(item.flag)
+
+                card = f"""
+                <div class="{card_class}">
+                  <div class="world-name">
+                    <span>{safe_flag}</span>
+                    <span>{safe_name}</span>
+                  </div>
+                  <div class="world-value">{_html.escape(item.value_str)}</div>
+                  <div class="world-change {change_class}">
+                    {arrow} {_html.escape(item.change_str)} ({_html.escape(item.change_pct_str)})
+                  </div>
+                  <div class="world-time">{_html.escape(item.time_str)}</div>
+                </div>
+                """
+                cards_html += card
+
+            # 最後の地域のグリッドを閉じる
+            if current_region:
+                all_html += cards_html + "</div>"
+
+            st.markdown(all_html, unsafe_allow_html=True)
+        else:
+            st.warning("データを取得できませんでした。")
+    else:
+        st.info("👆「📡 世界の株価を取得」ボタンを押してください。")
+
+    # 自動更新: st_autorefresh
+    if world_auto_sec > 0 and "world_last_fetch_ts" in st.session_state:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(
+            interval=world_auto_sec * 1000,
+            limit=None,
+            key="world_autorefresh",
         )
 
 # ===== タブ10: 四季報CSV分析 =====
