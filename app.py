@@ -90,14 +90,24 @@ components.html(
 
 # ===== みんかぶ風グローバルCSS =====
 _GLOBAL_CSS = """<style>
-/* --- Font --- */
+/* ========== みんかぶ風 基本設定 ========== */
 html, body, [class*="css"] {
   font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Yu Gothic",sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
-/* --- Header bar --- */
+/* --- Header: 白背景 + ネイビー下線（みんかぶ風） --- */
 header[data-testid="stHeader"] {
-  background: #014099 !important;
-  color: #FFF !important;
+  background: #FFF !important;
+  border-bottom: 3px solid #014099 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+}
+/* --- タイトル --- */
+h1 {
+  color: #014099 !important;
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  border-left: 4px solid #014099;
+  padding-left: 12px;
 }
 /* --- Tab styling --- */
 button[data-baseweb="tab"] {
@@ -105,17 +115,29 @@ button[data-baseweb="tab"] {
   font-size: 13px !important;
   color: #666 !important;
   border-bottom: 2px solid transparent !important;
-  padding: 8px 16px !important;
+  padding: 10px 18px !important;
+  transition: all 0.2s !important;
+}
+button[data-baseweb="tab"]:hover {
+  color: #014099 !important;
+  background: #F5F8FF !important;
 }
 button[data-baseweb="tab"][aria-selected="true"] {
   color: #014099 !important;
   border-bottom: 3px solid #014099 !important;
   background: transparent !important;
 }
+/* --- Subheader --- */
+h2, h3 {
+  color: #1a1a1a !important;
+  font-weight: 700 !important;
+}
+h2 { font-size: 18px !important; }
+h3 { font-size: 15px !important; }
 /* --- Sidebar --- */
 section[data-testid="stSidebar"] {
   background: #F7F8FA !important;
-  border-right: 1px solid #E5E5E5 !important;
+  border-right: 1px solid #E0E0E0 !important;
 }
 section[data-testid="stSidebar"] .stMarkdown h1,
 section[data-testid="stSidebar"] .stMarkdown h2 {
@@ -123,55 +145,148 @@ section[data-testid="stSidebar"] .stMarkdown h2 {
 }
 /* --- Primary button --- */
 button[kind="primary"], .stButton>button[kind="primary"] {
-  background-color: #014099 !important;
+  background: linear-gradient(135deg, #014099 0%, #1565C0 100%) !important;
   border: none !important;
-  border-radius: 3px !important;
+  border-radius: 4px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  transition: all 0.2s !important;
 }
 button[kind="primary"]:hover {
-  background-color: #3b82f6 !important;
+  background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%) !important;
+  box-shadow: 0 2px 8px rgba(1,64,153,0.25) !important;
+}
+/* --- Secondary button --- */
+.stButton>button:not([kind="primary"]) {
+  border: 1px solid #D0D0D0 !important;
+  border-radius: 4px !important;
+  font-weight: 500 !important;
+  color: #333 !important;
+}
+.stButton>button:not([kind="primary"]):hover {
+  border-color: #014099 !important;
+  color: #014099 !important;
+  background: #F5F8FF !important;
 }
 /* --- Metric cards --- */
 div[data-testid="stMetric"] {
-  background: #F7F8FA;
+  background: #FFF;
   border: 1px solid #E5E5E5;
-  border-radius: 3px;
-  padding: 12px;
+  border-radius: 4px;
+  padding: 14px;
+  border-top: 3px solid #014099;
 }
 div[data-testid="stMetricDelta"] svg { display: none; }
 /* --- Dataframes / Tables --- */
 div[data-testid="stDataFrame"] th {
-  background: #F0F0F0 !important;
+  background: #F0F4F8 !important;
   font-weight: 600 !important;
   font-size: 12px !important;
+  color: #333 !important;
 }
 /* --- Selectbox / Input --- */
 div[data-baseweb="select"] {
-  border-radius: 3px !important;
+  border-radius: 4px !important;
 }
 /* --- Success / Info / Warning boxes --- */
 div[data-testid="stAlert"] {
-  border-radius: 3px !important;
+  border-radius: 4px !important;
   font-size: 13px !important;
 }
 /* --- Expander --- */
 details[data-testid="stExpander"] {
   border: 1px solid #E5E5E5 !important;
-  border-radius: 3px !important;
+  border-radius: 4px !important;
 }
 /* --- Divider --- */
 hr {
   border-color: #E5E5E5 !important;
 }
-/* --- みんかぶ共通カード --- */
+
+/* ========== ニュース: みんかぶ風リスト ========== */
+.mk-news-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F0F0F0;
+  transition: background 0.15s;
+}
+.mk-news-item:hover { background: #FAFBFC; margin: 0 -8px; padding: 10px 8px; }
+.mk-news-time {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #999;
+  min-width: 42px;
+  padding-top: 2px;
+  font-family: "SF Mono","Monaco","Menlo",monospace;
+}
+.mk-news-body { flex: 1; min-width: 0; }
+.mk-news-title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.55;
+  color: #333;
+}
+.mk-news-title a { color: #333; text-decoration: none; }
+.mk-news-title a:hover { color: #014099; }
+.mk-news-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.mk-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #F0F0F0;
+  color: #666;
+  white-space: nowrap;
+}
+.mk-tag-source {
+  background: #EBF0F9;
+  color: #014099;
+}
+.mk-news-headline {
+  border-left: 3px solid #014099;
+  padding-left: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #E5E5E5;
+}
+.mk-news-headline .mk-news-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+.mk-news-summary {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.55;
+  margin-top: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mk-news-age {
+  font-size: 11px;
+  color: #B0B0B0;
+}
+
+/* ========== 適時開示: みんかぶ風カード ========== */
 .mk-card {
   border: 1px solid #E5E5E5;
-  border-radius: 3px;
+  border-radius: 4px;
   padding: 10px 14px;
   margin-bottom: 6px;
   background: #FFF;
   transition: background 0.15s;
 }
-.mk-card:hover { background: #FAFAFA; }
+.mk-card:hover { background: #FAFBFC; }
 .mk-card-header {
   display: flex;
   align-items: center;
@@ -181,8 +296,8 @@ hr {
 }
 .mk-badge {
   display: inline-block;
-  padding: 1px 8px;
-  border-radius: 10px;
+  padding: 2px 8px;
+  border-radius: 3px;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -190,13 +305,14 @@ hr {
 .mk-title {
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 .mk-title a { color: #333; text-decoration: none; }
 .mk-title a:hover { color: #014099; text-decoration: underline; }
 .mk-meta {
   font-size: 11px;
   color: #999;
+  font-family: "SF Mono","Monaco","Menlo",monospace;
 }
 .mk-company {
   font-weight: 700;
@@ -208,9 +324,9 @@ hr {
   font-weight: 600;
   color: #014099;
   background: #EBF0F9;
-  padding: 0px 5px;
+  padding: 1px 6px;
   border-radius: 3px;
-  font-family: monospace;
+  font-family: "SF Mono","Monaco","Menlo",monospace;
 }
 .mk-left-bar {
   border-left: 3px solid;
@@ -222,58 +338,61 @@ hr {
   line-height: 1.5;
   margin-top: 2px;
 }
-/* --- みんかぶ世界の株価グリッド --- */
+
+/* ========== 世界の株価グリッド ========== */
 .mk-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .mk-index-card {
   border: 1px solid #E5E5E5;
-  border-radius: 3px;
-  padding: 10px 12px;
+  border-radius: 4px;
+  padding: 12px 14px;
   background: #FFF;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
-.mk-index-card:hover { background: #FAFAFA; }
-.mk-index-card.mk-up { border-left: 3px solid #F54545; }
-.mk-index-card.mk-down { border-left: 3px solid #1B8A50; }
-.mk-index-card.mk-flat { border-left: 3px solid #999; }
+.mk-index-card:hover { background: #FAFBFC; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.mk-index-card.mk-up { border-left: 4px solid #F54545; }
+.mk-index-card.mk-down { border-left: 4px solid #1B8A50; }
+.mk-index-card.mk-flat { border-left: 4px solid #B0B0B0; }
 .mk-idx-name {
   font-size: 12px;
   font-weight: 600;
-  color: #333;
+  color: #666;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .mk-idx-value {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #1a1a1a;
-  margin: 2px 0;
+  margin: 3px 0;
+  letter-spacing: -0.5px;
 }
-.mk-idx-change { font-size: 13px; font-weight: 600; }
+.mk-idx-change { font-size: 14px; font-weight: 700; }
 .mk-idx-change.up { color: #F54545; }
 .mk-idx-change.down { color: #1B8A50; }
 .mk-idx-change.flat { color: #999; }
-.mk-idx-time { font-size: 10px; color: #999; margin-top: 2px; }
+.mk-idx-time { font-size: 10px; color: #B0B0B0; margin-top: 3px; }
 .mk-section {
   font-size: 14px;
   font-weight: 700;
-  margin: 12px 0 6px 0;
-  padding: 3px 10px;
+  margin: 14px 0 8px 0;
+  padding: 4px 12px;
   border-radius: 3px;
   display: inline-block;
   color: #FFF;
   background: #014099;
 }
-/* --- NEW tag animation --- */
+
+/* ========== NEW tag ========== */
 .mk-new-tag {
   display: inline-block;
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: 3px;
   font-size: 10px;
   font-weight: 700;
   background: #F54545;
@@ -284,13 +403,24 @@ hr {
   0%,100% { opacity:1; }
   50% { opacity:0.5; }
 }
-/* --- Page nav --- */
+
+/* ========== Page nav ========== */
 .mk-page-info {
   text-align: center;
   padding: 6px 0;
   font-weight: 600;
   font-size: 13px;
   color: #333;
+}
+
+/* ========== セクションタイトル（みんかぶ風） ========== */
+.mk-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+  border-left: 4px solid #014099;
+  padding-left: 10px;
+  margin: 16px 0 10px 0;
 }
 </style>"""
 st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
@@ -942,45 +1072,64 @@ with tab8:
                     st.session_state["news_page"] = total_pages
                     st.rerun()
 
-            # --- カード描画 ---
+            # --- みんかぶ風ニュースリスト描画 ---
             import html as _html
 
-            # --- カード一括レンダリング ---
-            cards_html_parts = []
-            for idx, item in enumerate(display_items):
-                icon = get_source_icon(item.source)
-                age = item.age_str()
-                time_str = item.published_str()
-                bg_color, fg_color = get_source_color(item.source)
-
+            # ヘッドライン（最初の3件は大きめ表示）
+            headline_count = min(3, len(display_items))
+            for idx, item in enumerate(display_items[:headline_count]):
                 safe_title = _html.escape(item.title)
-                safe_source = _html.escape(item.source)
                 safe_url = _html.escape(item.url)
+                safe_source = _html.escape(item.source)
                 safe_summary = ""
                 if item.summary:
-                    s = item.summary[:150] + ("..." if len(item.summary) > 150 else "")
+                    s = item.summary[:120] + ("..." if len(item.summary) > 120 else "")
                     safe_summary = _html.escape(s)
                 safe_category = _html.escape(item.category) if item.category else ""
+                age = _html.escape(item.age_str())
 
-                cat_span = f'<span class="mk-badge" style="background:#ECEFF1;color:#546E7A;">{safe_category}</span>' if safe_category else ""
-                summary_div = f'<div class="mk-summary">{safe_summary}</div>' if safe_summary else ""
-                time_div = f'<div class="mk-meta" style="margin-top:4px;">{_html.escape(time_str)}</div>' if time_str else ""
+                cat_tags = ""
+                if safe_category:
+                    cat_tags += f'<span class="mk-tag">{safe_category}</span>'
+                cat_tags += f'<span class="mk-tag mk-tag-source">{safe_source}</span>'
+                cat_tags += f'<span class="mk-news-age">{age}</span>'
+                summary_html = f'<div class="mk-news-summary">{safe_summary}</div>' if safe_summary else ""
 
-                cards_html_parts.append(
-                    f'<div class="mk-card mk-left-bar" style="border-left-color:{bg_color};">'
-                    f'<div class="mk-card-header">'
-                    f'<span class="mk-badge" style="background:{bg_color};color:{fg_color};">{icon} {safe_source}</span>'
-                    f'{cat_span}'
-                    f'<span class="mk-meta">{_html.escape(age)}</span>'
-                    f'</div>'
-                    f'<div class="mk-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
-                    f'{summary_div}{time_div}'
-                    f'</div>'
+                st.markdown(
+                    f'<div class="mk-news-headline">'
+                    f'<div class="mk-news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
+                    f'{summary_html}'
+                    f'<div class="mk-news-tags">{cat_tags}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
 
-            # 1件ずつ出力
-            for card in cards_html_parts:
-                st.markdown(card, unsafe_allow_html=True)
+            # 残りのニュース（みんかぶ風シンプルリスト: 時刻 | タイトル | タグ）
+            for idx, item in enumerate(display_items[headline_count:]):
+                safe_title = _html.escape(item.title)
+                safe_url = _html.escape(item.url)
+                safe_source = _html.escape(item.source)
+                safe_category = _html.escape(item.category) if item.category else ""
+                age = _html.escape(item.age_str())
+
+                # 時刻 (HH:MM or "○分前")
+                time_label = age if age else ""
+
+                cat_tags = ""
+                if safe_category:
+                    cat_tags += f'<span class="mk-tag">{safe_category}</span>'
+                cat_tags += f'<span class="mk-tag mk-tag-source">{safe_source}</span>'
+
+                st.markdown(
+                    f'<div class="mk-news-item">'
+                    f'<div class="mk-news-time">{time_label}</div>'
+                    f'<div class="mk-news-body">'
+                    f'<div class="mk-news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
+                    f'<div class="mk-news-tags">{cat_tags}</div>'
+                    f'</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
             # ページナビ（下部）
             if total_pages > 1:
