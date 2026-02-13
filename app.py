@@ -692,6 +692,11 @@ if st.button("📈 売買代金データを取得", type="primary", use_containe
     st.session_state["end_date"] = pd.Timestamp(end_date).strftime("%Y-%m-%d")
     st.session_state["freq"] = freq_map[freq]
     st.session_state["selected_sectors"] = selected_sectors
+    # 前回キャッシュをクリアして再取得させる
+    for _k in ["cached_data", "cached_sector_df", "cached_summary",
+               "cached_detail", "cached_momentum", "cached_comparison",
+               "cached_hot_sectors", "cached_stock_momentum"]:
+        st.session_state.pop(_k, None)
 
 # 売買代金データの取得（トリガー済みの場合のみ）
 has_market_data = False
@@ -708,32 +713,56 @@ if st.session_state.get("fetch_triggered"):
     selected_tickers = sorted(selected_tickers)
 
     if selected_tickers:
-        st.info(f"取得対象: {len(selected_tickers)}銘柄 | 期間: {start_str} 〜 {end_str}")
-
-        data = fetch_market_data_with_progress(
-            tickers_tuple=tuple(selected_tickers),
-            start_date=start_str,
-            end_date=end_str,
-        )
-
-        if not data.empty:
+        # キャッシュがあればそのまま使う（rerun のたびに再取得しない）
+        if "cached_data" in st.session_state and not st.session_state["cached_data"].empty:
+            data = st.session_state["cached_data"]
             available = sorted(set(data.columns.get_level_values(0))) if isinstance(data.columns, pd.MultiIndex) else []
-            st.success(f"取得完了: {len(available)}銘柄 | データ形状: {data.shape}")
-
-            # 集計
-            filtered_sector_tickers = {k: v for k, v in sector_tickers.items() if k in current_sectors}
-            sector_df = aggregate_by_sector(data, filtered_sector_tickers, freq=current_freq)
-            summary = get_sector_summary(sector_df)
-            detail = get_stock_detail(data, filtered_sector_tickers, sectors)
-
-            # 変化率・ランキング計算
-            momentum = get_momentum_ranking(sector_df)
-            comparison = get_period_comparison(sector_df)
-            hot_sectors = get_hot_sectors(sector_df, top_n=5)
-            stock_momentum = get_stock_momentum(data, filtered_sector_tickers, sectors)
-            has_market_data = True
+            st.success(f"取得済み: {len(available)}銘柄 | データ形状: {data.shape}")
         else:
-            st.error("データの取得に失敗しました。期間やセクターを確認してください。")
+            st.info(f"取得対象: {len(selected_tickers)}銘柄 | 期間: {start_str} 〜 {end_str}")
+            data = fetch_market_data_with_progress(
+                tickers_tuple=tuple(selected_tickers),
+                start_date=start_str,
+                end_date=end_str,
+            )
+            if not data.empty:
+                st.session_state["cached_data"] = data
+                available = sorted(set(data.columns.get_level_values(0))) if isinstance(data.columns, pd.MultiIndex) else []
+                st.success(f"取得完了: {len(available)}銘柄 | データ形状: {data.shape}")
+            else:
+                st.error("データの取得に失敗しました。期間やセクターを確認してください。")
+
+        if "cached_data" in st.session_state and not st.session_state["cached_data"].empty:
+            data = st.session_state["cached_data"]
+
+            # 集計結果もキャッシュ
+            if "cached_summary" not in st.session_state:
+                filtered_sector_tickers = {k: v for k, v in sector_tickers.items() if k in current_sectors}
+                sector_df = aggregate_by_sector(data, filtered_sector_tickers, freq=current_freq)
+                summary = get_sector_summary(sector_df)
+                detail = get_stock_detail(data, filtered_sector_tickers, sectors)
+                momentum = get_momentum_ranking(sector_df)
+                comparison = get_period_comparison(sector_df)
+                hot_sectors = get_hot_sectors(sector_df, top_n=5)
+                stock_momentum = get_stock_momentum(data, filtered_sector_tickers, sectors)
+                # キャッシュに保存
+                st.session_state["cached_sector_df"] = sector_df
+                st.session_state["cached_summary"] = summary
+                st.session_state["cached_detail"] = detail
+                st.session_state["cached_momentum"] = momentum
+                st.session_state["cached_comparison"] = comparison
+                st.session_state["cached_hot_sectors"] = hot_sectors
+                st.session_state["cached_stock_momentum"] = stock_momentum
+            else:
+                sector_df = st.session_state["cached_sector_df"]
+                summary = st.session_state["cached_summary"]
+                detail = st.session_state["cached_detail"]
+                momentum = st.session_state["cached_momentum"]
+                comparison = st.session_state["cached_comparison"]
+                hot_sectors = st.session_state["cached_hot_sectors"]
+                stock_momentum = st.session_state["cached_stock_momentum"]
+
+            has_market_data = True
     else:
         st.warning("セクターが選択されていません。")
 
