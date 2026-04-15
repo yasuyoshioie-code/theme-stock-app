@@ -19,7 +19,9 @@
   - 四季報オンラインプレミアム: 認証Cookie経由スクレイピング（st.secrets["shikiho_premium_cookie"]）
 """
 
+import concurrent.futures as _cf
 import re
+import socket as _socket
 import time
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass
@@ -28,6 +30,10 @@ import feedparser
 import requests
 from bs4 import BeautifulSoup
 import streamlit as st
+
+# feedparser は内部で urlopen を使っておりタイムアウトが効かないので
+# ソケット全体のデフォルトタイムアウトを設定（ハング防止）
+_socket.setdefaulttimeout(15)
 
 # ----------------------------------------------------------------
 # 定数
@@ -847,34 +853,48 @@ NEWS_SOURCES = {
 # 高レベルAPI
 # ----------------------------------------------------------------
 
+def _fetch_one_source(source_name: str) -> tuple[str, list[NewsItem], str | None]:
+    """単一ソースを安全にフェッチ。戻り値 = (source_name, items, err_msg or None)"""
+    source_info = NEWS_SOURCES.get(source_name)
+    if source_info is None:
+        return source_name, [], "unknown source"
+    try:
+        items = source_info["func"]()
+        return source_name, items, None
+    except Exception as e:
+        return source_name, [], str(e)
+
+
 def fetch_all_news(
     sources: list[str] | None = None,
     progress_callback=None,
 ) -> list[NewsItem]:
-    """複数ソースからニュースを一括取得し、日時順でソートして返す"""
+    """複数ソースからニュースを並列取得し、日時順でソートして返す"""
 
     if sources is None:
         sources = [name for name, info in NEWS_SOURCES.items() if info["default"]]
 
-    all_items: list[NewsItem] = []
     total = len(sources)
+    all_items: list[NewsItem] = []
+    errors: list[tuple[str, str]] = []
+    done = {"count": 0}
 
-    for i, source_name in enumerate(sources):
-        if progress_callback:
-            progress_callback(i / total, f"{source_name} を取得中...")
+    # 全ソースを並列で取得（max_workers = ソース数だが8を上限に）
+    max_workers = min(8, max(1, total))
+    with _cf.ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(_fetch_one_source, s): s for s in sources}
+        for fut in _cf.as_completed(futures):
+            name, items, err = fut.result()
+            if err:
+                errors.append((name, err))
+            else:
+                all_items.extend(items)
+            done["count"] += 1
+            if progress_callback:
+                progress_callback(done["count"] / total, f"{name} 完了 ({done['count']}/{total})")
 
-        source_info = NEWS_SOURCES.get(source_name)
-        if source_info is None:
-            continue
-
-        try:
-            items = source_info["func"]()
-            all_items.extend(items)
-        except Exception as e:
-            st.warning(f"{source_name} の取得に失敗: {e}")
-
-        if i < total - 1:
-            time.sleep(0.3)
+    for name, err in errors:
+        st.warning(f"{name} の取得に失敗: {err}")
 
     if progress_callback:
         progress_callback(1.0, "完了")
