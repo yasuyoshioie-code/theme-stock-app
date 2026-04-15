@@ -80,6 +80,11 @@ from sector_forecast import (
     heat_emoji,
     US_INDICATOR_CODES,
 )
+from us_sector_perf import (
+    fetch_us_sector_performance,
+    get_sector_etf_rankings,
+    US_SECTOR_ETFS,
+)
 
 st.set_page_config(
     page_title="テーマ株セクター 売買代金ダッシュボード",
@@ -1116,7 +1121,7 @@ if uploaded_file is not None:
     data_label = "アップロードデータ"
 elif os.path.exists(DEFAULT_XLSX):
     data_source = DEFAULT_XLSX
-    data_label = "内蔵データ（テーマ株40セクター）"
+    data_label = "内蔵データ（1,578テーマ・約3,800銘柄）"
 else:
     st.info("サイドバーからテーマ株スプレッドシート (.xlsx) をアップロードしてください。")
     st.markdown(
@@ -1148,17 +1153,37 @@ sector_tickers = get_sector_tickers(sectors)
 all_tickers = get_all_tickers(sectors)
 
 # サイドバー: セクター選択（データ読込後）
+# 1,578テーマあるので、デフォルトは人気30テーマに絞る（存在するもののみ）
+_DEFAULT_SELECTED_THEMES = [
+    "半導体商社", "半導体製造装置", "AI(人工知能)", "データセンター", "セキュリティ",
+    "量子コンピュータ", "5G", "SaaS", "自動運転", "EV(電気自動車)関連",
+    "EV充電器", "防衛", "防衛産業", "ロボット", "水素",
+    "核融合発電", "原子力発電", "再生医療", "バイオ医薬品", "金地金",
+    "REIT", "メタバース(仮想空間)", "総合商社", "海運", "太陽光発電",
+    "風力発電", "脱炭素", "円安メリット", "円高メリット", "インバウンド",
+]
+_default_sel = [t for t in _DEFAULT_SELECTED_THEMES if t in sectors]
+# それでも空なら最初の10テーマ
+if not _default_sel:
+    _default_sel = list(sectors.keys())[:10]
+
 with st.sidebar:
     st.divider()
     selected_sectors = st.multiselect(
         "表示セクター",
         options=list(sectors.keys()),
-        default=list(sectors.keys()),
+        default=_default_sel,
+        help=f"全 {len(sectors):,} テーマから選択（デフォルトは人気30テーマ）",
     )
 
-# 読込結果の表示
-with st.expander("読み込んだセクター情報", expanded=False):
-    for name, df in sectors.items():
+# 読込結果の表示（選択中のテーマのみ表示・多いと重いので）
+with st.expander(f"📂 読み込んだセクター情報（全 {len(sectors):,} テーマ）", expanded=False):
+    display_names = selected_sectors if selected_sectors else list(sectors.keys())[:20]
+    st.caption(f"選択中の {len(display_names)} テーマを表示（全件は非表示）")
+    for name in display_names:
+        df = sectors.get(name)
+        if df is None:
+            continue
         st.markdown(f"**{name}**: {len(df)}銘柄")
         st.dataframe(df[["証券コード", "銘柄名"]].reset_index(drop=True), hide_index=True, height=150)
 
@@ -1307,14 +1332,83 @@ with tab_main:
 
     st.divider()
 
+    # --- Section 1b: 米国セクターETF パフォーマンス（NY終値ベース）---
+    st.markdown(
+        '<div class="mk-section-title">📊 米国セクターETF パフォーマンス（朝7時更新）</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "🇺🇸 **NY市場終了後（JST 6:00〜7:00）に更新**。主要11セクター + 注目テーマETF の前日変化率。"
+        "該当セクターが上がっていれば、同分野の日本株に買いが波及しやすい傾向。"
+    )
+
+    # 米国セクターETF を取得（yfinance 1h キャッシュ）
+    col_etf_refresh, _ = st.columns([1, 5])
+    with col_etf_refresh:
+        if st.button("🔄 米国ETFを更新", key="refresh_us_etfs"):
+            fetch_us_sector_performance.clear()
+
+    with st.spinner("📈 米国セクターETF 取得中..."):
+        etf_perfs = fetch_us_sector_performance()
+
+    # 主要11セクターの ETF をメトリック表示
+    tab_us_major, tab_us_theme = st.tabs(["🏛️ 主要11セクター", "🎯 テーマETF (注目)"])
+
+    with tab_us_major:
+        major_etfs = [p for p in etf_perfs.values() if p.category == "major"]
+        major_etfs.sort(key=lambda x: x.change_pct if x.change_pct is not None else -999, reverse=True)
+        if major_etfs:
+            rows_per_col = 6
+            n_cols = 4
+            cols = st.columns(n_cols)
+            for i, p in enumerate(major_etfs):
+                with cols[i % n_cols]:
+                    if p.change_pct is None:
+                        st.metric(f"{p.name}\n({p.ticker})", "—", "—")
+                    else:
+                        st.metric(
+                            f"{p.name}",
+                            f"${p.close:,.2f}" if p.close else "—",
+                            f"{p.change_pct:+.2f}%",
+                        )
+
+    with tab_us_theme:
+        theme_etfs = [p for p in etf_perfs.values() if p.category == "theme"]
+        theme_etfs.sort(key=lambda x: x.change_pct if x.change_pct is not None else -999, reverse=True)
+        if theme_etfs:
+            # 上昇Top10と下落Bottom5に分けて表示
+            col_up, col_down = st.columns(2)
+            with col_up:
+                st.markdown("**🔥 上昇 Top 10**")
+                up_data = pd.DataFrame([
+                    {"ETF": p.ticker, "銘柄": p.name, "変化率": f"{p.change_pct:+.2f}%" if p.change_pct is not None else "—"}
+                    for p in theme_etfs[:10]
+                ])
+                st.dataframe(up_data, use_container_width=True, hide_index=True, height=380)
+            with col_down:
+                st.markdown("**❄️ 下落 Bottom 5**")
+                down = theme_etfs[-5:] if len(theme_etfs) >= 5 else []
+                down_data = pd.DataFrame([
+                    {"ETF": p.ticker, "銘柄": p.name, "変化率": f"{p.change_pct:+.2f}%" if p.change_pct is not None else "—"}
+                    for p in reversed(down)
+                ])
+                st.dataframe(down_data, use_container_width=True, hide_index=True, height=200)
+
+    # 最終取得時刻
+    sample_p = next((p for p in etf_perfs.values() if p.fetched_at), None)
+    if sample_p:
+        st.caption(f"🕒 最終取得: {sample_p.fetched_at.strftime('%Y-%m-%d %H:%M:%S JST')}　（データ元: Yahoo Finance）")
+
+    st.divider()
+
     # --- Section 2: 明日盛り上がりそうセクター Top 10 ---
     st.markdown(
         '<div class="mk-section-title">🔥 明日盛り上がりそうセクター ランキング</div>',
         unsafe_allow_html=True,
     )
     st.caption(
-        "🧮 **明日温度** = NDXスコア平均 × 0.7 + (50 + 米国補正) × 0.3　"
-        "／ 銘柄別NDXスコアをセクター集計し、米国市場の相関ボーナスを加算した総合指標"
+        "🧮 **明日温度** = NDXスコア平均 × 0.6 + (50 + 指数補正 + ETF補正) × 0.4　"
+        "／ 前日の日本市場(NDX)+ 米国主要指数(SOX/NASDAQ等) + 米国セクターETF の3層で算出"
     )
 
     if has_market_data:
@@ -1359,7 +1453,7 @@ with tab_main:
                 st.session_state[pred_cache_key] = pred_df
         pred_df = st.session_state[pred_cache_key]
 
-        forecast_df = compute_sector_forecast(pred_df, us_snapshot)
+        forecast_df = compute_sector_forecast(pred_df, us_snapshot, etf_perfs=etf_perfs)
 
         if not forecast_df.empty:
             # Top 3 をカード表示
@@ -1368,17 +1462,19 @@ with tab_main:
             for i, (col, (_, row)) in enumerate(zip(card_cols, top3.iterrows())):
                 medal = ["🥇", "🥈", "🥉"][i]
                 heat = heat_emoji(row["明日温度"])
-                reason = row["US理由"] if row["US理由"] else "（US補正なし）"
+                reason = row["補正理由"] if row["補正理由"] else "（補正なし）"
+                total_us = row["指数補正"] + row["ETF補正"]
                 card_html = (
                     '<div style="background: linear-gradient(135deg, #014099 0%, #1565C0 100%);'
                     'color: white; padding: 18px; border-radius: 12px;'
-                    'box-shadow: 0 4px 8px rgba(0,0,0,0.1); min-height: 160px;">'
+                    'box-shadow: 0 4px 8px rgba(0,0,0,0.1); min-height: 180px;">'
                     f'<div style="font-size: 18px; font-weight: 700;">{medal} {row["セクター"]} {heat}</div>'
                     f'<div style="font-size: 28px; font-weight: 800; margin: 8px 0;">{row["明日温度"]:.1f}</div>'
                     f'<div style="font-size: 12px; opacity: 0.9;">'
                     f'NDX平均 <b>{row["NDX平均"]:.1f}</b> ／ 強気 <b>{row["強気銘柄数"]}/{row["銘柄数"]}</b></div>'
                     f'<div style="font-size: 11px; margin-top: 8px; opacity: 0.85;">'
-                    f'📈 US補正: <b>{row["US補正"]:+.1f}</b><br/>{reason}</div>'
+                    f'📈 US合計: <b>{total_us:+.1f}</b>'
+                    f' (指数{row["指数補正"]:+.1f} / ETF{row["ETF補正"]:+.1f})<br/>{reason}</div>'
                     '</div>'
                 )
                 with col:
@@ -1400,10 +1496,20 @@ with tab_main:
 - 🟡 **40-50**: やや弱気
 - 🔵 **40未満**: 弱含み／US逆風
 
-**US補正の仕組み**:
-各セクターはあらかじめ設定された「米国指標との相関係数」を持ち、
-その指標の変化率に応じて ±30 pt の補正を受けます。
-例: 半導体セクターは SOX 指数と強い正相関、円高メリットはドル円と負相関。
+**明日温度の算出式**:
+```
+明日温度 = NDXスコア平均 × 0.6 + (50 + 指数補正 + ETF補正) × 0.4
+```
+
+**3層の情報源**:
+1. **NDXスコア** — 前日の日本市場のテクニカル（終値強さ・出来高・MA整列・RSI等）
+2. **指数補正** — 米国主要指数の変化率（SOX/NASDAQ/VIX/ドル円/米10年債/WTI等）
+3. **ETF補正** — 米国セクターETFの前日終値変化率（SMH/XBI/GDX/URA等、朝7時 JST 更新）
+
+例:
+- 半導体テーマ → SMH(半導体ETF)とSOX指数の両方で追い風判定
+- バイオ医薬品 → XBI(バイオETF)と米ゲノム(ARKG)で追い風判定
+- 金地金 → GDX(金鉱株ETF)で追い風判定
                 """)
 
         st.divider()
