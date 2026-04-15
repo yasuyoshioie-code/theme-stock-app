@@ -32,7 +32,11 @@ from charts import (
     stock_momentum_bar_chart,
     stock_change_heatmap,
     market_ranking_bar,
+    next_day_ranking_bar,
 )
+from next_day_ranking import get_next_day_ranking, filter_ranking_by_sector
+from news_analyzer import analyze_news_item, build_stock_index
+from etf2083_ui import render_etf2083_tab
 from market_ranking import (
     RANKING_TYPES,
     MARKET_OPTIONS,
@@ -99,7 +103,7 @@ st.markdown(
 )
 import streamlit.components.v1 as components
 
-# ===== みんかぶ風グローバルCSS =====
+# ===== Terminal Pro デザイン: 2026年プレミアム・ダークモード =====
 _GLOBAL_CSS = """<style>
 /* ========== Chrome翻訳バー非表示 ========== */
 .goog-te-banner-frame, #goog-gt-tt, .goog-te-balloon-frame,
@@ -111,314 +115,710 @@ div[id^="goog-gt-"], iframe.goog-te-menu-frame {
   overflow: hidden !important;
 }
 body { top: 0 !important; }
-/* ========== みんかぶ風 基本設定 ========== */
+
+/* ========== Design Tokens ========== */
+:root {
+  --bg: #0A0E17;
+  --bg-grad: radial-gradient(ellipse at top, #0F1626 0%, #0A0E17 55%);
+  --surface: #121826;
+  --surface-2: #181F33;
+  --surface-3: #1F2942;
+  --border: rgba(148, 163, 196, 0.12);
+  --border-strong: rgba(148, 163, 196, 0.22);
+  --text: #F0F3FA;
+  --text-2: #A8B3CD;
+  --text-3: #6B7895;
+  --accent: #00E5FF;
+  --accent-2: #7C3AED;
+  --accent-glow: 0 0 24px rgba(0, 229, 255, 0.35);
+  --up: #FF5E6C;
+  --up-soft: rgba(255, 94, 108, 0.14);
+  --down: #00D9A3;
+  --down-soft: rgba(0, 217, 163, 0.14);
+  --warn: #FFB020;
+  --info: #3B82F6;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.5);
+  --mono: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+}
+
+/* ========== Base ========== */
 html, body, [class*="css"] {
-  font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Yu Gothic",sans-serif;
+  font-family: 'Inter', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, 'Yu Gothic', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01", "ss03";
 }
-/* --- Header: 白背景 + ネイビー下線（みんかぶ風） --- */
+[data-testid="stAppViewContainer"], .stApp {
+  background: var(--bg-grad) !important;
+  background-attachment: fixed !important;
+}
+.stApp::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(600px circle at 10% 0%, rgba(124, 58, 237, 0.08), transparent 40%),
+    radial-gradient(800px circle at 90% 10%, rgba(0, 229, 255, 0.06), transparent 45%);
+  z-index: 0;
+}
+
+/* ========== Header ========== */
 header[data-testid="stHeader"] {
-  background: #FFF !important;
-  border-bottom: 3px solid #014099 !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+  background: rgba(10, 14, 23, 0.72) !important;
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
 }
-/* --- タイトル --- */
+
+/* ========== Title ========== */
 h1 {
-  color: #014099 !important;
-  font-size: 22px !important;
-  font-weight: 700 !important;
-  border-left: 4px solid #014099;
-  padding-left: 12px;
+  color: var(--text) !important;
+  font-size: 26px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+  padding-left: 0 !important;
+  border-left: none !important;
+  background: linear-gradient(135deg, #FFFFFF 0%, #A8B3CD 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: relative;
 }
-/* --- Tab styling --- */
+h1::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 22px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  border-radius: 2px;
+  margin-right: 12px;
+  vertical-align: middle;
+  box-shadow: var(--accent-glow);
+}
+h2, h3 { color: var(--text) !important; font-weight: 700 !important; letter-spacing: -0.01em !important; }
+h2 { font-size: 19px !important; }
+h3 { font-size: 15px !important; }
+
+/* ========== Tabs (pill + underline hybrid) ========== */
+div[data-baseweb="tab-list"] {
+  gap: 2px !important;
+  border-bottom: 1px solid var(--border) !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin-bottom: 12px !important;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(12px);
+  background: rgba(10, 14, 23, 0.6) !important;
+}
 button[data-baseweb="tab"] {
   font-weight: 600 !important;
   font-size: 13px !important;
-  color: #666 !important;
+  color: var(--text-3) !important;
   border-bottom: 2px solid transparent !important;
-  padding: 10px 18px !important;
-  transition: all 0.2s !important;
+  padding: 12px 16px !important;
+  transition: all 0.18s ease !important;
+  background: transparent !important;
+  border-radius: 0 !important;
 }
 button[data-baseweb="tab"]:hover {
-  color: #014099 !important;
-  background: #F5F8FF !important;
+  color: var(--text) !important;
+  background: rgba(0, 229, 255, 0.05) !important;
 }
 button[data-baseweb="tab"][aria-selected="true"] {
-  color: #014099 !important;
-  border-bottom: 3px solid #014099 !important;
+  color: var(--accent) !important;
+  border-bottom: 2px solid var(--accent) !important;
   background: transparent !important;
-}
-/* --- Subheader --- */
-h2, h3 {
-  color: #1a1a1a !important;
-  font-weight: 700 !important;
-}
-h2 { font-size: 18px !important; }
-h3 { font-size: 15px !important; }
-/* --- Main content: ワンカラム風 --- */
-.stMainBlockContainer {
-  max-width: 1100px !important;
-  margin: 0 auto !important;
-  padding: 1rem 2rem !important;
-}
-/* --- Sidebar --- */
-section[data-testid="stSidebar"] {
-  background: #F7F8FA !important;
-  border-right: 1px solid #E0E0E0 !important;
-}
-section[data-testid="stSidebar"] .stMarkdown h1,
-section[data-testid="stSidebar"] .stMarkdown h2 {
-  color: #014099 !important;
-}
-/* --- Primary button --- */
-button[kind="primary"], .stButton>button[kind="primary"] {
-  background: linear-gradient(135deg, #014099 0%, #1565C0 100%) !important;
-  border: none !important;
-  border-radius: 4px !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.02em !important;
-  transition: all 0.2s !important;
-}
-button[kind="primary"]:hover {
-  background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%) !important;
-  box-shadow: 0 2px 8px rgba(1,64,153,0.25) !important;
-}
-/* --- Secondary button --- */
-.stButton>button:not([kind="primary"]) {
-  border: 1px solid #D0D0D0 !important;
-  border-radius: 4px !important;
-  font-weight: 500 !important;
-  color: #333 !important;
-}
-.stButton>button:not([kind="primary"]):hover {
-  border-color: #014099 !important;
-  color: #014099 !important;
-  background: #F5F8FF !important;
-}
-/* --- Metric cards --- */
-div[data-testid="stMetric"] {
-  background: #FFF;
-  border: 1px solid #E5E5E5;
-  border-radius: 4px;
-  padding: 14px;
-  border-top: 3px solid #014099;
-}
-div[data-testid="stMetricDelta"] svg { display: none; }
-/* --- Dataframes / Tables --- */
-div[data-testid="stDataFrame"] th {
-  background: #F0F4F8 !important;
-  font-weight: 600 !important;
-  font-size: 12px !important;
-  color: #333 !important;
-}
-/* --- Selectbox / Input --- */
-div[data-baseweb="select"] {
-  border-radius: 4px !important;
-}
-/* --- Success / Info / Warning boxes --- */
-div[data-testid="stAlert"] {
-  border-radius: 4px !important;
-  font-size: 13px !important;
-}
-/* --- Expander --- */
-details[data-testid="stExpander"] {
-  border: 1px solid #E5E5E5 !important;
-  border-radius: 4px !important;
-}
-/* --- Divider --- */
-hr {
-  border-color: #E5E5E5 !important;
+  text-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
 }
 
-/* ========== ニュース: みんかぶ風リスト ========== */
+/* ========== Main container ========== */
+.stMainBlockContainer {
+  max-width: 1280px !important;
+  margin: 0 auto !important;
+  padding: 1.2rem 2rem 3rem !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* ========== Sidebar ========== */
+section[data-testid="stSidebar"] {
+  background: rgba(18, 24, 38, 0.85) !important;
+  backdrop-filter: blur(16px);
+  border-right: 1px solid var(--border) !important;
+}
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 {
+  color: var(--text) !important;
+}
+
+/* ========== Buttons ========== */
+button[kind="primary"], .stButton>button[kind="primary"] {
+  background: linear-gradient(135deg, #00E5FF 0%, #00B8D4 60%, #7C3AED 130%) !important;
+  color: #0A0E17 !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+  transition: all 0.2s !important;
+  box-shadow: 0 2px 10px rgba(0, 229, 255, 0.25), inset 0 1px 0 rgba(255,255,255,0.3) !important;
+}
+button[kind="primary"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 229, 255, 0.45), inset 0 1px 0 rgba(255,255,255,0.4) !important;
+}
+button[kind="primary"]:active { transform: translateY(0); }
+.stButton>button:not([kind="primary"]) {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text) !important;
+  border-radius: var(--radius-sm) !important;
+  font-weight: 500 !important;
+  transition: all 0.18s !important;
+}
+.stButton>button:not([kind="primary"]):hover {
+  background: var(--surface-2) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+.stButton>button:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+/* ========== Inputs / Selects ========== */
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div,
+div[data-baseweb="textarea"] > div {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text) !important;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+div[data-baseweb="select"] > div:hover,
+div[data-baseweb="input"] > div:hover {
+  border-color: rgba(0, 229, 255, 0.4) !important;
+}
+div[data-baseweb="select"] > div:focus-within,
+div[data-baseweb="input"] > div:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.15) !important;
+}
+input, textarea { color: var(--text) !important; }
+div[data-baseweb="popover"] { background: var(--surface-2) !important; }
+
+/* ========== Metric cards ========== */
+div[data-testid="stMetric"] {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+div[data-testid="stMetric"]::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  opacity: 0.6;
+}
+div[data-testid="stMetric"]:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+  font-family: var(--mono) !important;
+  font-weight: 700 !important;
+  font-size: 24px !important;
+  letter-spacing: -0.02em !important;
+  color: var(--text) !important;
+}
+div[data-testid="stMetric"] [data-testid="stMetricLabel"] {
+  color: var(--text-3) !important;
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  font-weight: 600 !important;
+}
+div[data-testid="stMetricDelta"] svg { display: none; }
+div[data-testid="stMetricDelta"] { font-family: var(--mono) !important; font-weight: 600 !important; }
+
+/* ========== Dataframes ========== */
+div[data-testid="stDataFrame"] {
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  overflow: hidden;
+  background: var(--surface) !important;
+}
+div[data-testid="stDataFrame"] th {
+  background: var(--surface-2) !important;
+  color: var(--text-2) !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-bottom: 1px solid var(--border-strong) !important;
+}
+div[data-testid="stDataFrame"] td {
+  color: var(--text) !important;
+  font-family: var(--mono) !important;
+  font-size: 12px !important;
+}
+
+/* ========== Alerts ========== */
+div[data-testid="stAlert"] {
+  border-radius: var(--radius-sm) !important;
+  font-size: 13px !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-strong) !important;
+}
+
+/* ========== Expander ========== */
+details[data-testid="stExpander"] {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+}
+details[data-testid="stExpander"] summary {
+  color: var(--text-2) !important;
+}
+
+/* ========== Divider ========== */
+hr { border-color: var(--border) !important; margin: 1.2rem 0 !important; }
+
+/* ========== Toggles / Radios ========== */
+label[data-baseweb="radio"] span:first-child,
+label[data-baseweb="checkbox"] span:first-child {
+  background: var(--surface) !important;
+  border-color: var(--border-strong) !important;
+}
+
+/* ========== Progress bar ========== */
+div[data-testid="stProgress"] > div > div > div {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)) !important;
+}
+
+/* ========== Captions ========== */
+.stCaption, p[data-testid="stCaptionContainer"], small {
+  color: var(--text-3) !important;
+}
+
+/* ========== Toast ========== */
+div[data-testid="stToast"] {
+  background: var(--surface-2) !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text) !important;
+}
+
+/* ========================================================== */
+/* ========== Ticker Bar (LED-style glass) ========== */
+/* ========================================================== */
+.mk-ticker-bar {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  background: linear-gradient(180deg, rgba(24, 31, 51, 0.8), rgba(18, 24, 38, 0.8));
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 18px;
+  padding: 0;
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.03);
+  position: relative;
+}
+.mk-ticker-bar::-webkit-scrollbar { height: 4px; }
+.mk-ticker-bar::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+.mk-ticker-item {
+  flex: 1;
+  min-width: 160px;
+  padding: 12px 16px;
+  text-align: left;
+  border-right: 1px solid var(--border);
+  transition: background 0.18s;
+  position: relative;
+}
+.mk-ticker-item:last-child { border-right: none; }
+.mk-ticker-item:hover { background: rgba(0, 229, 255, 0.04); }
+.mk-ticker-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.mk-ticker-value {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  margin-bottom: 2px;
+}
+.mk-ticker-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-left: 6px;
+  font-weight: 500;
+}
+.mk-ticker-change {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.mk-ticker-change.up { color: var(--up); text-shadow: 0 0 8px rgba(255,94,108,0.35); }
+.mk-ticker-change.down { color: var(--down); text-shadow: 0 0 8px rgba(0,217,163,0.35); }
+.mk-ticker-change.flat { color: var(--text-3); }
+
+/* ========================================================== */
+/* ========== News List ========== */
+/* ========================================================== */
 .mk-news-item {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 0;
-  padding: 9px 0;
-  border-bottom: 1px solid #F0F0F0;
-  transition: background 0.15s;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  transition: all 0.18s;
+  border-radius: 0;
 }
-.mk-news-item:hover { background: #F8F9FB; }
+.mk-news-item .mk-news-title { padding-top: 1px; }
+.mk-news-item .mk-news-time { padding-top: 3px; }
+.mk-news-item:hover {
+  background: var(--surface);
+  padding-left: 18px;
+}
 .mk-news-body { flex: 1; min-width: 0; }
 .mk-news-title {
   font-size: 14px;
   font-weight: 500;
-  line-height: 1.5;
-  color: #333;
+  line-height: 1.55;
+  color: var(--text);
 }
-.mk-news-title a { color: #333; text-decoration: none; }
-.mk-news-title a:hover { color: #014099; }
+.mk-news-title a { color: var(--text); text-decoration: none; transition: color 0.15s; }
+.mk-news-title a:hover { color: var(--accent); }
 .mk-news-time {
   flex-shrink: 0;
-  font-size: 12px;
-  color: #999;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
   white-space: nowrap;
   margin-left: 16px;
-  min-width: 100px;
+  min-width: 110px;
   text-align: right;
+  font-weight: 500;
 }
 .mk-news-tags {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 3px;
+  margin-top: 6px;
   flex-wrap: wrap;
 }
 .mk-tag {
   display: inline-block;
-  padding: 2px 10px;
-  border-radius: 14px;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 11px;
   font-weight: 500;
-  background: #F0F0F0;
-  color: #666;
+  background: var(--surface-2);
+  color: var(--text-2);
   white-space: nowrap;
-  border: 1px solid #E5E5E5;
+  border: 1px solid var(--border-strong);
   cursor: pointer;
   transition: all 0.15s;
 }
-.mk-tag:hover { background: #E8E8E8; }
+.mk-tag:hover { background: var(--surface-3); color: var(--text); border-color: var(--accent); }
 .mk-tag-source {
-  background: #EBF0F9;
-  color: #014099;
-  border-color: #D0DDEF;
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--accent);
+  border-color: rgba(0, 229, 255, 0.25);
 }
-.mk-tag-source:hover { background: #D8E4F5; }
+.mk-tag-source:hover { background: rgba(0, 229, 255, 0.16); }
 .mk-news-headline {
-  padding: 0 0 16px 0;
-  margin-bottom: 8px;
-  border-bottom: 1px solid #E5E5E5;
+  padding: 14px 16px 18px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+  position: relative;
+  overflow: hidden;
+}
+.mk-news-headline::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
 }
 .mk-news-headline .mk-news-title {
   font-size: 18px;
   font-weight: 700;
   line-height: 1.5;
+  letter-spacing: -0.01em;
 }
-.mk-news-headline .mk-news-title a { color: #014099; }
-.mk-news-headline .mk-news-title a:hover { text-decoration: underline; }
+.mk-news-headline .mk-news-title a { color: var(--text); }
+.mk-news-headline .mk-news-title a:hover { color: var(--accent); }
 .mk-news-hl-time {
-  font-size: 12px;
-  color: #999;
-  margin-bottom: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
 }
 .mk-news-summary {
   font-size: 13px;
-  color: #555;
-  line-height: 1.65;
-  margin-top: 6px;
-}
-.mk-news-age {
-  font-size: 11px;
-  color: #B0B0B0;
+  color: var(--text-2);
+  line-height: 1.7;
+  margin-top: 10px;
 }
 .mk-news-new {
   display: inline-block;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 9px;
   font-weight: 700;
-  background: #F54545;
+  background: var(--up);
   color: #FFF;
-  margin-left: 6px;
+  margin-left: 8px;
   vertical-align: middle;
+  letter-spacing: 0.08em;
+  animation: mk-pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(255,94,108,0.5);
 }
-/* --- 指数ティッカーバー --- */
-.mk-ticker-bar {
+
+/* ========== 銘柄材料チップ & センチメント ========== */
+.mk-stock-material {
   display: flex;
-  gap: 0;
-  overflow-x: auto;
-  background: #F7F8FA;
-  border: 1px solid #E5E5E5;
-  border-radius: 4px;
-  margin-bottom: 16px;
-  padding: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(90deg, rgba(255,94,108,0.08) 0%, rgba(124,58,237,0.06) 100%);
+  border-radius: 8px;
+  border-left: 3px solid var(--up);
 }
-.mk-ticker-bar::-webkit-scrollbar { height: 4px; }
-.mk-ticker-bar::-webkit-scrollbar-thumb { background: #CCC; border-radius: 2px; }
-.mk-ticker-item {
-  flex: 1;
-  min-width: 140px;
-  padding: 10px 14px;
-  text-align: center;
-  border-right: 1px solid #E5E5E5;
-  transition: background 0.15s;
-}
-.mk-ticker-item:last-child { border-right: none; }
-.mk-ticker-item:hover { background: #EFF2F7; }
-.mk-ticker-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: #014099;
-  margin-bottom: 2px;
-}
-.mk-ticker-value {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1a1a1a;
-}
-.mk-ticker-sub {
+.mk-material-label {
   font-size: 10px;
-  color: #999;
+  font-weight: 700;
+  color: var(--up);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-right: 4px;
+  font-family: var(--mono);
 }
-.mk-ticker-change {
+.mk-stock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.15s;
 }
-.mk-ticker-change.up { color: #F54545; }
-.mk-ticker-change.down { color: #1B8A50; }
-.mk-ticker-change.flat { color: #999; }
-
-/* ========== 適時開示: みんかぶ風カード ========== */
-.mk-card {
-  border: 1px solid #E5E5E5;
+.mk-stock-chip:hover {
+  background: rgba(0, 229, 255, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+.mk-stock-chip-code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.mk-stock-chip-sector {
+  font-size: 10px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.mk-sentiment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-family: var(--mono);
+  margin-right: 6px;
+}
+.mk-sentiment-positive {
+  background: var(--up-soft);
+  color: var(--up);
+  border: 1px solid rgba(255,94,108,0.35);
+}
+.mk-sentiment-negative {
+  background: var(--down-soft);
+  color: var(--down);
+  border: 1px solid rgba(0,217,163,0.35);
+}
+.mk-sentiment-neutral {
+  background: var(--surface-2);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+.mk-breaking-badge {
+  display: inline-block;
+  padding: 2px 8px;
   border-radius: 4px;
-  padding: 10px 14px;
-  margin-bottom: 6px;
-  background: #FFF;
-  transition: background 0.15s;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 800;
+  background: linear-gradient(90deg, #FF5E6C, #FF8C42);
+  color: #FFF;
+  letter-spacing: 0.12em;
+  margin-right: 8px;
+  box-shadow: 0 0 10px rgba(255,94,108,0.4);
+  animation: mk-pulse 1.8s ease-in-out infinite;
 }
-.mk-card:hover { background: #FAFBFC; }
+
+/* ========== ブログタイトル提案ボックス ========== */
+.mk-blog-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(0,229,255,0.05) 0%, rgba(124,58,237,0.05) 100%);
+  border: 1px solid rgba(0,229,255,0.20);
+  border-radius: 8px;
+}
+.mk-blog-box-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  margin-bottom: 6px;
+}
+.mk-blog-title-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mk-blog-title-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.mk-blog-title-item:hover {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+.mk-blog-title-num {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(0,229,255,0.1);
+  border-radius: 4px;
+  padding: 2px 6px;
+  letter-spacing: 0.04em;
+}
+
+/* ========================================================== */
+/* ========== Disclosure Cards ========== */
+/* ========================================================== */
+.mk-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  margin-bottom: 6px;
+  background: var(--surface);
+  transition: all 0.15s;
+  position: relative;
+}
+.mk-card:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  transform: translateX(2px);
+}
 .mk-card-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 5px;
   flex-wrap: wrap;
 }
 .mk-badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 3px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
   white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .mk-title {
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.55;
+  color: var(--text);
 }
-.mk-title a { color: #333; text-decoration: none; }
-.mk-title a:hover { color: #014099; text-decoration: underline; }
+.mk-title a { color: var(--text); text-decoration: none; }
+.mk-title a:hover { color: var(--accent); text-decoration: underline; }
 .mk-meta {
   font-size: 11px;
-  color: #999;
-  font-family: "SF Mono","Monaco","Menlo",monospace;
+  color: var(--text-3);
+  font-family: var(--mono);
 }
 .mk-company {
   font-weight: 700;
   font-size: 13px;
-  color: #333;
+  color: var(--text);
 }
 .mk-code {
+  font-family: var(--mono);
   font-size: 11px;
   font-weight: 600;
-  color: #014099;
-  background: #EBF0F9;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-family: "SF Mono","Monaco","Menlo",monospace;
+  color: var(--accent);
+  background: rgba(0, 229, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 229, 255, 0.2);
 }
 .mk-left-bar {
   border-left: 3px solid;
@@ -426,93 +826,155 @@ hr {
 }
 .mk-summary {
   font-size: 12px;
-  color: #666;
-  line-height: 1.5;
-  margin-top: 2px;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin-top: 3px;
 }
 
-/* ========== 世界の株価グリッド ========== */
+/* ========================================================== */
+/* ========== World Indices Grid ========== */
+/* ========================================================== */
 .mk-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
 }
 .mk-index-card {
-  border: 1px solid #E5E5E5;
-  border-radius: 4px;
-  padding: 12px 14px;
-  background: #FFF;
-  transition: all 0.15s;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+  transition: all 0.18s;
+  position: relative;
+  overflow: hidden;
 }
-.mk-index-card:hover { background: #FAFBFC; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-.mk-index-card.mk-up { border-left: 4px solid #F54545; }
-.mk-index-card.mk-down { border-left: 4px solid #1B8A50; }
-.mk-index-card.mk-flat { border-left: 4px solid #B0B0B0; }
+.mk-index-card::after {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; width: 60px; height: 60px;
+  background: radial-gradient(circle, rgba(0,229,255,0.06), transparent 70%);
+  pointer-events: none;
+}
+.mk-index-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.mk-index-card.mk-up {
+  border-left: 3px solid var(--up);
+  box-shadow: inset 4px 0 12px rgba(255,94,108,0.1);
+}
+.mk-index-card.mk-down {
+  border-left: 3px solid var(--down);
+  box-shadow: inset 4px 0 12px rgba(0,217,163,0.1);
+}
+.mk-index-card.mk-flat { border-left: 3px solid var(--text-3); }
 .mk-idx-name {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: #666;
+  color: var(--text-2);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .mk-idx-value {
-  font-size: 22px;
+  font-family: var(--mono);
+  font-size: 24px;
   font-weight: 700;
-  color: #1a1a1a;
-  margin: 3px 0;
-  letter-spacing: -0.5px;
+  color: var(--text);
+  margin: 4px 0;
+  letter-spacing: -0.03em;
 }
-.mk-idx-change { font-size: 14px; font-weight: 700; }
-.mk-idx-change.up { color: #F54545; }
-.mk-idx-change.down { color: #1B8A50; }
-.mk-idx-change.flat { color: #999; }
-.mk-idx-time { font-size: 10px; color: #B0B0B0; margin-top: 3px; }
-.mk-section {
+.mk-idx-change {
+  font-family: var(--mono);
   font-size: 14px;
   font-weight: 700;
-  margin: 14px 0 8px 0;
-  padding: 4px 12px;
-  border-radius: 3px;
-  display: inline-block;
-  color: #FFF;
-  background: #014099;
+  letter-spacing: -0.01em;
+}
+.mk-idx-change.up { color: var(--up); }
+.mk-idx-change.down { color: var(--down); }
+.mk-idx-change.flat { color: var(--text-3); }
+.mk-idx-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 6px;
 }
 
-/* ========== NEW tag ========== */
+.mk-section {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 18px 0 10px 0;
+  padding: 5px 14px;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  color: var(--accent);
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ========== NEW tag (TDnet) ========== */
 .mk-new-tag {
   display: inline-block;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 9px;
   font-weight: 700;
-  background: #F54545;
+  background: var(--up);
   color: #FFF;
-  animation: mk-pulse 1.5s ease-in-out infinite;
+  letter-spacing: 0.1em;
+  animation: mk-pulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 14px rgba(255,94,108,0.45);
 }
 @keyframes mk-pulse {
-  0%,100% { opacity:1; }
-  50% { opacity:0.5; }
+  0%,100% { opacity:1; transform: scale(1); }
+  50% { opacity:0.75; transform: scale(0.96); }
 }
 
-/* ========== Page nav ========== */
+/* ========== Page info ========== */
 .mk-page-info {
   text-align: center;
-  padding: 6px 0;
+  padding: 8px 0;
+  font-family: var(--mono);
   font-weight: 600;
   font-size: 13px;
-  color: #333;
+  color: var(--text-2);
 }
 
-/* ========== セクションタイトル（みんかぶ風） ========== */
+/* ========== Section title ========== */
 .mk-section-title {
   font-size: 16px;
   font-weight: 700;
-  color: #1a1a1a;
-  border-left: 4px solid #014099;
-  padding-left: 10px;
-  margin: 16px 0 10px 0;
+  color: var(--text);
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  margin: 18px 0 12px 0;
+  letter-spacing: -0.01em;
+}
+
+/* ========== Scrollbar ========== */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 5px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ========== Plotly chart wrapper tidy ========== */
+div[data-testid="stPlotlyChart"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
 }
 </style>"""
 st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
@@ -557,6 +1019,15 @@ with st.sidebar:
     has_default = os.path.exists(DEFAULT_XLSX)
     if has_default:
         st.success("✅ 内蔵データ: テーマ株40セクター")
+        with open(DEFAULT_XLSX, "rb") as _f:
+            st.download_button(
+                label="📥 内蔵データをダウンロード",
+                data=_f.read(),
+                file_name="default_sectors.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                help="40セクター × 656銘柄のテーマ株データ",
+            )
     uploaded_file = st.file_uploader(
         "別のデータで上書き（任意）",
         type=["xlsx"],
@@ -697,6 +1168,10 @@ if st.button("📈 売買代金データを取得", type="primary", use_containe
                "cached_detail", "cached_momentum", "cached_comparison",
                "cached_hot_sectors", "cached_stock_momentum"]:
         st.session_state.pop(_k, None)
+    # 翌日予測ランキングのキャッシュもクリア
+    for _k in list(st.session_state.keys()):
+        if _k.startswith("next_day_"):
+            st.session_state.pop(_k, None)
 
 # 売買代金データの取得（トリガー済みの場合のみ）
 has_market_data = False
@@ -768,11 +1243,201 @@ if st.session_state.get("fetch_triggered"):
 
 # --- タブ表示 ---
 # ニュース・市場ランキングは常に表示、売買代金系はデータ取得後に表示
-tab8, tab9, tab11, tab10, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📰 ニュース", "📋 適時開示", "🌏 世界の株価", "📙 四季報CSV", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
+tab_pred, tab8, tab_etf, tab9, tab11, tab10, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["🎯 明日注目銘柄", "📰 ニュース", "📦 ETF 2083組入", "📋 適時開示", "🌏 世界の株価", "📙 四季報CSV", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
 )
 
 _NEED_DATA_MSG = "⬆️ 上の「📈 売買代金データを取得」ボタンを押してデータを取得してください。"
+
+# ===== タブ: 明日注目銘柄（NDXスコア）=====
+with tab_pred:
+    st.markdown(
+        '<div class="mk-section-title">🎯 翌営業日 上昇期待銘柄ランキング</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "世界最高レベルのトレーダー/アナリスト視点で **10種のテクニカル指標を加重平均** した "
+        "**NDXスコア**（Next-Day eXpected, 0〜100）で翌営業日に上がりやすい銘柄を可視化します。"
+    )
+
+    # --- 判断ロジック説明（折りたたみ） ---
+    with st.expander("📖 スコアリング・ロジック（判断基準）", expanded=False):
+        st.markdown("""
+### 🔬 NDXスコア = 10指標の加重平均 (0〜100)
+
+| 指標 | 重み | 判断理由 |
+|---|---|---|
+| **終値強さ** `(Close-Low)/(High-Low)` | **18%** | 高値引け=強い買い残存→翌日も継続されやすい |
+| **出来高急増** `今日vol/20日avg` | **15%** | 平均2倍以上=機関投資家の注目集中サイン |
+| **移動平均整列** `MA5>MA25>MA75` | **12%** | パーフェクトオーダー=強力な上昇トレンド |
+| **5日モメンタム** | **12%** | 短期の勢いを捕捉 |
+| **RSI(14)** | **10%** | 50-70が最適、>80は反落警戒（減点） |
+| **MACDヒストグラム** | **10%** | ゼロライン上&拡大=強気、縮小=勢い鈍化 |
+| **売買代金急増** | **8%** | 出来高×価格の総合的な注目度 |
+| **20日高値ブレイク** | **8%** | 新高値更新=抵抗突破、継続力◎ |
+| **前日比モメンタム** | **7%** | 当日の勢いを加味 |
+
+### ⚠️ ペナルティ項目
+- **1日+15%超の急騰** → 過熱ペナルティ（-3pt/%）
+- **ATR>8%** → 異常ボラティリティ減点
+- **薄商い銘柄** → 流動性フィルタで除外
+
+### 💡 スコアの読み方
+- 🔥 **75以上**: 強い買いサイン（複数指標が揃っている）
+- 🟠 **60-75**: 買い候補（注視推奨）
+- 🟢 **45-60**: 中立（判断保留）
+- 🔴 **45未満**: 弱含み or 過熱リスク
+        """)
+
+    if has_market_data:
+        # --- コントロール ---
+        col_p1, col_p2, col_p3 = st.columns([2, 1, 1])
+        with col_p1:
+            pred_sector_filter = st.multiselect(
+                "セクターで絞り込み",
+                options=["すべて"] + list(current_sectors),
+                default=["すべて"],
+                key="pred_sector_filter",
+            )
+        with col_p2:
+            pred_top_n = st.selectbox(
+                "表示件数",
+                [10, 20, 30, 50, 100],
+                index=1,
+                key="pred_top_n",
+            )
+        with col_p3:
+            pred_min_turnover = st.selectbox(
+                "最低売買代金(億円)",
+                [0.5, 1.0, 3.0, 5.0, 10.0, 30.0],
+                index=1,
+                key="pred_min_turnover",
+                help="この金額未満の薄商い銘柄は除外",
+            )
+
+        # --- ランキング計算（キャッシュ） ---
+        pred_cache_key = f"next_day_{pred_min_turnover}"
+        if pred_cache_key not in st.session_state:
+            with st.spinner("🔍 テクニカル指標を計算中..."):
+                filtered_sector_tickers = {
+                    k: v for k, v in sector_tickers.items() if k in current_sectors
+                }
+                pred_df = get_next_day_ranking(
+                    data,
+                    filtered_sector_tickers,
+                    sectors,
+                    min_turnover_oku=pred_min_turnover,
+                )
+                st.session_state[pred_cache_key] = pred_df
+        pred_df = st.session_state[pred_cache_key]
+
+        if not pred_df.empty:
+            filtered_pred = filter_ranking_by_sector(pred_df, pred_sector_filter)
+
+            # --- サマリーメトリクス ---
+            st.divider()
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            with col_m1:
+                st.metric("対象銘柄数", f"{len(filtered_pred):,}銘柄")
+            with col_m2:
+                strong_count = (filtered_pred["NDXスコア"] >= 75).sum()
+                st.metric("🔥 強気シグナル", f"{strong_count}銘柄")
+            with col_m3:
+                avg_score = filtered_pred["NDXスコア"].mean()
+                st.metric("平均NDXスコア", f"{avg_score:.1f}")
+            with col_m4:
+                breakout_count = (filtered_pred["ブレイク"] == "✅").sum()
+                st.metric("20日高値更新", f"{breakout_count}銘柄")
+
+            # --- トップN表示 ---
+            top_df = filtered_pred.head(pred_top_n)
+
+            col_c1, col_c2 = st.columns([3, 4])
+            with col_c1:
+                st.plotly_chart(
+                    next_day_ranking_bar(top_df, top_n=pred_top_n),
+                    use_container_width=True,
+                )
+            with col_c2:
+                st.markdown(f"**🏆 Top {len(top_df)} 詳細ランキング**")
+                # 重要カラムのみ表示用に並び替え
+                display_cols = [
+                    "銘柄コード", "銘柄名", "セクター", "NDXスコア",
+                    "終値", "前日比(%)", "終値強さ(%)", "出来高倍率",
+                    "売買代金(億円)", "5日変化(%)", "RSI", "MACD",
+                    "MA整列", "ブレイク", "トレーダー判断",
+                ]
+                st.dataframe(
+                    top_df[display_cols],
+                    use_container_width=True,
+                    height=min(700, 50 + len(top_df) * 35),
+                )
+
+            # --- Top3 ハイライトカード ---
+            st.divider()
+            st.markdown('<div class="mk-section-title">💎 本日のトップ3ピック</div>', unsafe_allow_html=True)
+            top3_cols = st.columns(min(3, len(top_df)))
+            for idx, (_, row) in enumerate(top_df.head(3).iterrows()):
+                with top3_cols[idx]:
+                    score = row["NDXスコア"]
+                    if score >= 75:
+                        bar_color = "#FF5E6C"
+                    elif score >= 60:
+                        bar_color = "#FFB020"
+                    else:
+                        bar_color = "#00E5FF"
+                    st.markdown(
+                        f'''
+                        <div style="
+                            background: linear-gradient(135deg, rgba(18,24,38,0.9) 0%, rgba(31,41,66,0.9) 100%);
+                            border: 1px solid rgba(148,163,196,0.2);
+                            border-left: 4px solid {bar_color};
+                            border-radius: 10px;
+                            padding: 16px;
+                            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+                        ">
+                            <div style="font-size:10px;color:#6B7895;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;">RANK #{idx+1}</div>
+                            <div style="font-size:18px;font-weight:700;color:#F0F3FA;margin-top:4px;">{row["銘柄名"]}</div>
+                            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00E5FF;margin-top:2px;">
+                                {row["銘柄コード"]} · {row["セクター"]}
+                            </div>
+                            <div style="font-family:'JetBrains Mono',monospace;font-size:32px;font-weight:800;color:{bar_color};margin-top:12px;letter-spacing:-0.03em;text-shadow:0 0 20px {bar_color}66;">
+                                {score:.1f}
+                            </div>
+                            <div style="font-size:10px;color:#A8B3CD;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">NDX Score</div>
+                            <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(148,163,196,0.15);">
+                                <div style="font-size:11px;color:#A8B3CD;line-height:1.6;">
+                                    <b>終値:</b> <span style="font-family:'JetBrains Mono',monospace;">{row["終値"]:,.1f}円</span><br>
+                                    <b>前日比:</b> <span style="font-family:'JetBrains Mono',monospace;color:{'#FF5E6C' if row["前日比(%)"]>0 else '#00D9A3'};">{row["前日比(%)"]:+.2f}%</span><br>
+                                    <b>出来高:</b> <span style="font-family:'JetBrains Mono',monospace;">{row["出来高倍率"]:.2f}x</span><br>
+                                    <b>売買代金:</b> <span style="font-family:'JetBrains Mono',monospace;">{row["売買代金(億円)"]:,.1f}億円</span>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px;font-size:12px;color:#F0F3FA;line-height:1.6;padding:8px 10px;background:rgba(0,229,255,0.05);border-radius:6px;border-left:2px solid #00E5FF;">
+                                💬 {row["トレーダー判断"]}
+                            </div>
+                        </div>
+                        ''',
+                        unsafe_allow_html=True,
+                    )
+
+            st.divider()
+            st.caption(
+                "⚠️ **重要**: NDXスコアはテクニカル指標のみに基づく統計的ランキングです。"
+                "実際の投資判断は、企業ファンダメンタルズ・業績・ニュース・市況・マクロ環境を総合して行ってください。"
+                "このツールは補助的な分析ツールとして活用し、投資は自己責任でお願いします。"
+            )
+        else:
+            st.warning("⚠️ 計算対象の銘柄がありません。流動性フィルタを緩めるか、期間を長くしてデータを再取得してください。")
+    else:
+        st.info(_NEED_DATA_MSG)
+        st.markdown("""
+        ##### 📌 使い方
+        1. 左サイドバーで**期間を1ヶ月以上**に設定（テクニカル指標の精度のため）
+        2. 📈 **売買代金データを取得** ボタンを押す
+        3. このタブで **NDXスコア** ランキングが自動計算される
+        4. **15:30 の日本市場引け後**に見れば、翌営業日の注目銘柄が一目瞭然
+        """)
 
 # ===== タブ1: セクター概況 =====
 with tab1:
@@ -787,14 +1452,91 @@ with tab1:
 with tab2:
     if has_market_data:
         st.subheader("🔥 セクター盛り上がりランキング")
-        st.caption("直近5日変化率・期間後半変化率・vs期間平均 の加重平均でスコア化")
+        st.caption("💡 表の行をクリックするとセクター内の銘柄一覧が表示されます")
 
         if not momentum.empty:
             col1, col2 = st.columns([3, 2])
             with col1:
                 st.plotly_chart(momentum_bar_chart(momentum), use_container_width=True)
             with col2:
-                st.dataframe(momentum, use_container_width=True, height=400)
+                # 行選択可能なdataframe
+                momentum_event = st.dataframe(
+                    momentum,
+                    use_container_width=True,
+                    height=400,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="momentum_table",
+                )
+
+            # --- 選択されたセクターの銘柄ドリルダウン ---
+            selected_rows = momentum_event.selection.rows if momentum_event else []
+            if selected_rows:
+                # momentum は 1始まりindex なので iloc で取得
+                selected_sector = momentum.iloc[selected_rows[0]]["セクター"]
+
+                st.divider()
+                st.markdown(
+                    f'<div class="mk-section-title">📂 {selected_sector} — 構成銘柄</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # 1) セクター内銘柄リスト（元データ）
+                sector_stocks = sectors.get(selected_sector, pd.DataFrame())
+
+                # 2) 売買代金データがあれば急騰スコア付きで表示
+                if not stock_momentum.empty:
+                    sector_momentum = stock_momentum[
+                        stock_momentum["セクター"] == selected_sector
+                    ].copy()
+                    sector_momentum = sector_momentum.sort_values(
+                        "急騰スコア", ascending=False
+                    ).reset_index(drop=True)
+                    sector_momentum.index = sector_momentum.index + 1
+                    sector_momentum.index.name = "順位"
+
+                    if not sector_momentum.empty:
+                        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                        with col_s1:
+                            st.metric("構成銘柄数", f"{len(sector_momentum)}銘柄")
+                        with col_s2:
+                            total_val = sector_momentum["直近(億円)"].sum()
+                            st.metric("直近売買代金合計", f"{total_val:,.1f}億円")
+                        with col_s3:
+                            avg_score = sector_momentum["急騰スコア"].mean()
+                            st.metric("平均急騰スコア", f"{avg_score:+.1f}%")
+                        with col_s4:
+                            winners = (sector_momentum["急騰スコア"] > 0).sum()
+                            st.metric(
+                                "プラス銘柄",
+                                f"{winners} / {len(sector_momentum)}",
+                                delta=f"{winners/len(sector_momentum)*100:.0f}%",
+                            )
+
+                        st.markdown("**📊 銘柄別 急騰スコアランキング**")
+                        st.dataframe(
+                            sector_momentum.drop(columns=["セクター"]),
+                            use_container_width=True,
+                            height=min(600, 50 + len(sector_momentum) * 35),
+                        )
+                    else:
+                        # momentum なし = fallback でセクター銘柄リストのみ
+                        if not sector_stocks.empty:
+                            st.dataframe(
+                                sector_stocks[["証券コード", "銘柄名"]].reset_index(drop=True),
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+                else:
+                    # momentum 計算前 or 未取得 → 単純に構成銘柄
+                    if not sector_stocks.empty:
+                        st.dataframe(
+                            sector_stocks[["証券コード", "銘柄名"]].reset_index(drop=True),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+            else:
+                st.caption("👆 表の左側の行をクリックすると、そのセクターの構成銘柄が表示されます")
 
         st.divider()
         st.subheader("週間・期間 変化率")
@@ -1139,6 +1881,10 @@ with tab8:
         st.session_state["news_fetched_at"] = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         st.session_state["news_last_fetch_ts"] = _time.time()
         st.session_state["news_page"] = 1  # 新規取得時はページ1に戻す
+        # 古いニュース分析キャッシュをクリア
+        for k in list(st.session_state.keys()):
+            if isinstance(k, str) and k.startswith("news_analysis_"):
+                del st.session_state[k]
 
     # 手動取得
     if manual_fetch:
@@ -1170,18 +1916,62 @@ with tab8:
         if items:
             st.success(f"取得記事数: {len(items)}件 | 取得時刻: {fetched_at}")
 
-            # ソースフィルタ
-            all_sources_in_data = sorted(set(item.source for item in items))
-            filter_source = st.multiselect(
-                "ソースで絞り込み",
-                options=["すべて"] + all_sources_in_data,
-                default=["すべて"],
-                key="news_filter_source",
-            )
+            # --- 銘柄インデックス構築（セクターデータがある場合のみ・キャッシュ） ---
+            known_stocks = []
+            if sectors:
+                cache_key = f"news_known_stocks_{len(sectors)}"
+                if cache_key not in st.session_state:
+                    st.session_state[cache_key] = build_stock_index(sectors)
+                known_stocks = st.session_state[cache_key]
+
+            # --- ニュース分析（アイテムIDでキャッシュ） ---
+            analysis_cache_key = f"news_analysis_{st.session_state.get('news_fetched_at', '')}"
+            if analysis_cache_key not in st.session_state:
+                analysis_map = {}
+                for item in items:
+                    item_id = f"{item.url}"
+                    analysis_map[item_id] = analyze_news_item(
+                        item.title or "",
+                        item.summary or "",
+                        known_stocks,
+                    )
+                st.session_state[analysis_cache_key] = analysis_map
+            analysis_map = st.session_state[analysis_cache_key]
+
+            # フィルタ: ソース & 個別銘柄材料
+            col_f1, col_f2 = st.columns([3, 1])
+            with col_f1:
+                all_sources_in_data = sorted(set(item.source for item in items))
+                filter_source = st.multiselect(
+                    "ソースで絞り込み",
+                    options=["すべて"] + all_sources_in_data,
+                    default=["すべて"],
+                    key="news_filter_source",
+                )
+            with col_f2:
+                only_stock_material = st.toggle(
+                    "💎 個別株材料のみ",
+                    value=False,
+                    key="news_only_stock",
+                    help="特定の銘柄名・証券コードが本文に含まれるニュースだけを表示",
+                )
 
             filtered_items = items
             if "すべて" not in filter_source:
-                filtered_items = [item for item in items if item.source in filter_source]
+                filtered_items = [item for item in filtered_items if item.source in filter_source]
+            if only_stock_material:
+                filtered_items = [
+                    item for item in filtered_items
+                    if analysis_map.get(item.url) and analysis_map[item.url].has_stock_material
+                ]
+
+            # 材料あり件数サマリ
+            stock_material_count = sum(
+                1 for item in filtered_items
+                if analysis_map.get(item.url) and analysis_map[item.url].has_stock_material
+            )
+            if stock_material_count > 0:
+                st.caption(f"💎 個別株材料あり: {stock_material_count}件 / 全{len(filtered_items)}件中")
 
             # ページネーション
             total_items = len(filtered_items)
@@ -1226,6 +2016,72 @@ with tab8:
             # --- みんかぶ風ニュースリスト描画 ---
             import html as _html
 
+            def _render_stock_material(analysis) -> str:
+                """銘柄材料 + センチメント + 速報バッジ HTML"""
+                if not analysis:
+                    return ""
+                parts = []
+
+                # 上段: 速報 & センチメント
+                top_parts = []
+                if analysis.is_breaking:
+                    top_parts.append('<span class="mk-breaking-badge">🚨 速報</span>')
+                sent_cls = f"mk-sentiment-{analysis.sentiment}"
+                top_parts.append(
+                    f'<span class="mk-sentiment {sent_cls}">'
+                    f'{analysis.sentiment_emoji} {analysis.sentiment_label}'
+                    f'</span>'
+                )
+
+                # 銘柄チップ
+                if analysis.mentioned_stocks:
+                    chips = []
+                    for s in analysis.mentioned_stocks:
+                        safe_name = _html.escape(s.name)
+                        safe_code = _html.escape(s.code)
+                        safe_sector = _html.escape(s.sector) if s.sector else ""
+                        sector_html = f'<span class="mk-stock-chip-sector">{safe_sector}</span>' if safe_sector else ""
+                        chips.append(
+                            f'<span class="mk-stock-chip">'
+                            f'<span class="mk-stock-chip-code">{safe_code}</span>'
+                            f'{safe_name}'
+                            f'{sector_html}'
+                            f'</span>'
+                        )
+                    parts.append(
+                        f'<div class="mk-stock-material">'
+                        f'<span class="mk-material-label">💎 個別株材料</span>'
+                        f'{"".join(top_parts)}'
+                        f'{"".join(chips)}'
+                        f'</div>'
+                    )
+                elif analysis.is_breaking or analysis.sentiment != "neutral":
+                    # 銘柄ヒットなしでも速報/センチメントは出す
+                    parts.append(
+                        f'<div class="mk-stock-material" style="border-left-color: var(--accent);">'
+                        f'{"".join(top_parts)}'
+                        f'</div>'
+                    )
+                return "".join(parts)
+
+            def _render_blog_titles(analysis) -> str:
+                """ブログタイトル提案 HTML"""
+                if not analysis or not analysis.blog_titles:
+                    return ""
+                items_html = "".join(
+                    f'<li class="mk-blog-title-item">'
+                    f'<span class="mk-blog-title-num">案{i+1}</span>'
+                    f'<span>{_html.escape(t)}</span>'
+                    f'</li>'
+                    for i, t in enumerate(analysis.blog_titles)
+                )
+                return (
+                    f'<div class="mk-blog-box">'
+                    f'<div class="mk-blog-box-header">✍️ ブログ記事タイトル案</div>'
+                    f'<ul class="mk-blog-title-list">{items_html}</ul>'
+                    f'</div>'
+                )
+
             # ヘッドライン（最初の1件は大きめ表示 — みんかぶ風）
             if display_items:
                 item = display_items[0]
@@ -1245,17 +2101,23 @@ with tab8:
                 cat_tags += f'<span class="mk-tag mk-tag-source">{safe_source}</span>'
                 summary_html = f'<div class="mk-news-summary">{safe_summary}</div>' if safe_summary else ""
 
+                analysis = analysis_map.get(item.url)
+                material_html = _render_stock_material(analysis)
+                blog_html = _render_blog_titles(analysis)
+
                 st.markdown(
                     f'<div class="mk-news-headline">'
                     f'<div class="mk-news-hl-time">{time_str}</div>'
                     f'<div class="mk-news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a></div>'
                     f'{summary_html}'
                     f'<div class="mk-news-tags">{cat_tags}</div>'
+                    f'{material_html}'
+                    f'{blog_html}'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
 
-            # 残りのニュース（みんかぶ風: タイトル左 — 時刻右端）
+            # 残りのニュース（みんかぶ風: タイトル左 — 時刻右端 + 材料あり記事は拡張表示）
             for idx, item in enumerate(display_items[1:]):
                 safe_title = _html.escape(item.title)
                 safe_url = _html.escape(item.url)
@@ -1266,10 +2128,16 @@ with tab8:
                 # 新着は5分以内
                 new_tag = '<span class="mk-news-new">NEW</span>' if age in ("たった今", "1分前", "2分前", "3分前", "4分前", "5分前") else ""
 
+                analysis = analysis_map.get(item.url)
+                material_html = _render_stock_material(analysis)
+                blog_html = _render_blog_titles(analysis) if analysis and analysis.has_stock_material else ""
+
                 st.markdown(
                     f'<div class="mk-news-item">'
                     f'<div class="mk-news-body">'
                     f'<div class="mk-news-title"><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_title}</a>{new_tag}</div>'
+                    f'{material_html}'
+                    f'{blog_html}'
                     f'</div>'
                     f'<div class="mk-news-time">{time_display}</div>'
                     f'</div>',
@@ -1312,6 +2180,10 @@ with tab8:
             limit=None,
             key="news_autorefresh",
         )
+
+# ===== タブ: ETF 2083 組入銘柄トラッカー =====
+with tab_etf:
+    render_etf2083_tab(sectors=sectors if sectors else None)
 
 # ===== タブ9: 適時開示 =====
 with tab9:

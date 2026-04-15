@@ -2,25 +2,70 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# みんかぶ風カラーパレット（ネイビー基調）
+# Terminal Pro ダーク配色パレット（2026）
 COLORS = [
-    "#014099",  # ネイビー
-    "#1565C0",  # ブルー
-    "#1B8A50",  # グリーン
-    "#D84315",  # オレンジ
-    "#6A1B9A",  # パープル
-    "#00695C",  # ティール
-    "#C62828",  # レッド
-    "#EF6C00",  # アンバー
-    "#37474F",  # ブルーグレー
-    "#AD1457",  # ピンク
-    "#4527A0",  # ディープパープル
-    "#0277BD",  # ライトブルー
+    "#00E5FF",  # シアン（プライマリ）
+    "#7C3AED",  # パープル
+    "#00D9A3",  # ミント
+    "#FF5E6C",  # コーラル
+    "#FFB020",  # アンバー
+    "#F472B6",  # ピンク
+    "#60A5FA",  # スカイ
+    "#A78BFA",  # ラベンダー
+    "#34D399",  # エメラルド
+    "#FB923C",  # オレンジ
+    "#22D3EE",  # ターコイズ
+    "#C084FC",  # バイオレット
 ]
 
 # 上昇=赤 / 下落=緑（日本式）
-COLOR_UP = "#F54545"
-COLOR_DOWN = "#1B8A50"
+COLOR_UP = "#FF5E6C"
+COLOR_DOWN = "#00D9A3"
+
+# 共通ダークテンプレート設定
+_DARK_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(
+        family="Inter, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, system-ui, sans-serif",
+        color="#F0F3FA",
+        size=12,
+    ),
+    title=dict(font=dict(color="#F0F3FA", size=15, family="Inter, sans-serif")),
+    xaxis=dict(
+        gridcolor="rgba(148,163,196,0.08)",
+        zerolinecolor="rgba(148,163,196,0.15)",
+        linecolor="rgba(148,163,196,0.2)",
+        tickfont=dict(color="#A8B3CD", size=11),
+        title=dict(font=dict(color="#A8B3CD", size=12)),
+    ),
+    yaxis=dict(
+        gridcolor="rgba(148,163,196,0.08)",
+        zerolinecolor="rgba(148,163,196,0.15)",
+        linecolor="rgba(148,163,196,0.2)",
+        tickfont=dict(color="#A8B3CD", size=11),
+        title=dict(font=dict(color="#A8B3CD", size=12)),
+    ),
+    legend=dict(
+        font=dict(color="#A8B3CD", size=11),
+        bgcolor="rgba(18,24,38,0.6)",
+        bordercolor="rgba(148,163,196,0.15)",
+        borderwidth=1,
+    ),
+    hoverlabel=dict(
+        bgcolor="#1F2942",
+        bordercolor="#252D42",
+        font=dict(color="#F0F3FA", family="Inter, sans-serif", size=12),
+    ),
+    margin=dict(l=60, r=20, t=50, b=50),
+)
+
+
+def _apply_dark(fig: go.Figure, **overrides) -> go.Figure:
+    """共通のダークテーマを適用"""
+    layout = {**_DARK_LAYOUT, **overrides}
+    fig.update_layout(**layout)
+    return fig
 
 
 def sector_bar_chart(summary: pd.DataFrame) -> go.Figure:
@@ -38,7 +83,9 @@ def sector_bar_chart(summary: pd.DataFrame) -> go.Figure:
         title="セクター別 売買代金合計",
         xaxis_title="セクター",
         yaxis_title="売買代金 (億円)",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=500,
     )
     return fig
@@ -92,7 +139,9 @@ def timeseries_chart(
         title="セクター別 売買代金推移",
         xaxis_title="日付",
         yaxis_title="売買代金 (億円)",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=550,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         hovermode="x unified",
@@ -125,7 +174,9 @@ def momentum_bar_chart(ranking_df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         title="セクター盛り上がりランキング",
         xaxis_title="盛り上がりスコア (%)",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=max(400, len(df) * 35),
         yaxis=dict(autorange="reversed"),
     )
@@ -158,7 +209,9 @@ def week_change_bar_chart(comparison_df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         title="週間 売買代金変化率",
         xaxis_title="変化率 (%)",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=max(400, len(df) * 35),
     )
     fig.add_vline(x=0, line_color="gray", line_width=1)
@@ -190,7 +243,9 @@ def period_change_bar_chart(comparison_df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         title="期間 売買代金変化率（後半 vs 前半）",
         xaxis_title="変化率 (%)",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=max(400, len(df) * 35),
     )
     fig.add_vline(x=0, line_color="gray", line_width=1)
@@ -215,7 +270,9 @@ def comparison_bar_chart(sector_df: pd.DataFrame, selected_sectors: list[str]) -
         xaxis_title="日付",
         yaxis_title="売買代金 (億円)",
         barmode="group",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=500,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
@@ -243,7 +300,9 @@ def normalized_chart(sector_df: pd.DataFrame, selected_sectors: list[str]) -> go
         title="セクター比較（正規化：初日=100）",
         xaxis_title="日付",
         yaxis_title="相対値",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=500,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
@@ -270,7 +329,9 @@ def stock_detail_bar(detail_df: pd.DataFrame, top_n: int = 20) -> go.Figure:
     fig.update_layout(
         title=f"銘柄別 売買代金ランキング (Top {top_n})",
         xaxis_title="売買代金 (億円)",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=max(400, top_n * 30),
         yaxis=dict(autorange="reversed"),
     )
@@ -318,7 +379,9 @@ def stock_momentum_bar_chart(
     fig.update_layout(
         title=f"銘柄別 売買代金急騰ランキング (Top {top_n})",
         xaxis_title="急騰スコア",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=max(500, top_n * 28),
         yaxis=dict(autorange="reversed"),
     )
@@ -359,7 +422,9 @@ def stock_change_heatmap(momentum_df: pd.DataFrame, top_n: int = 30) -> go.Figur
     )
     fig.update_layout(
         title=f"銘柄別 変化率ヒートマップ (Top {top_n})",
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=max(500, top_n * 28),
         yaxis=dict(autorange="reversed"),
     )
@@ -447,7 +512,9 @@ def market_ranking_bar(
     fig.update_layout(
         title=f"{ranking_name} (Top {n_display})",
         xaxis_title=value_col,
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=max(500, n_display * 24),
         yaxis=dict(autorange="reversed"),
         margin=dict(l=280),
@@ -455,4 +522,60 @@ def market_ranking_bar(
     if "(%)" in value_col or "率" in value_col:
         fig.add_vline(x=0, line_color="gray", line_width=1)
 
+    return fig
+
+
+def next_day_ranking_bar(ranking_df: pd.DataFrame, top_n: int = 30) -> go.Figure:
+    """翌日期待ランキング（NDXスコア）の横棒グラフ"""
+    if ranking_df.empty:
+        fig = go.Figure()
+        fig.update_layout(title="データなし")
+        return fig
+
+    df = ranking_df.head(top_n).copy()
+    df["label"] = df["銘柄名"] + " (" + df["銘柄コード"] + ")"
+
+    # スコアに応じた色グラデーション（高スコア=ホットピンク系、低スコア=シアン）
+    def _color(s):
+        if s >= 75:
+            return "#FF5E6C"   # 強い買い
+        if s >= 60:
+            return "#FFB020"   # 買い
+        if s >= 45:
+            return "#00E5FF"   # 中立
+        return "#6B7895"      # 弱気
+
+    colors = [_color(s) for s in df["NDXスコア"]]
+
+    fig = go.Figure(
+        go.Bar(
+            x=df["NDXスコア"],
+            y=df["label"],
+            orientation="h",
+            marker=dict(
+                color=colors,
+                line=dict(color="rgba(255,255,255,0.08)", width=1),
+            ),
+            text=df["NDXスコア"].apply(lambda x: f"{x:.1f}"),
+            textposition="outside",
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "NDXスコア: %{x:.1f}<br>"
+                "<extra></extra>"
+            ),
+        )
+    )
+
+    n_display = min(top_n, len(df))
+    fig.update_layout(
+        title=f"🎯 翌営業日 上昇期待ランキング (Top {n_display})",
+        xaxis_title="NDXスコア (0-100)",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=max(500, n_display * 26),
+        yaxis=dict(autorange="reversed"),
+        margin=dict(l=260),
+    )
+    fig.add_vline(x=50, line_dash="dash", line_color="rgba(148,163,196,0.3)", line_width=1)
     return fig

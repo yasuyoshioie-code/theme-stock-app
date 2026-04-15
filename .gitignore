@@ -1,11 +1,38 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+
+# Virtual envs
 .env
+.env.*
 .venv/
 venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# データ類（ユーザー提供のエクセルはデフォルトのみ同梱）
 *.xlsx
 !default_sectors.xlsx
 *.csv
-.DS_Store
-Thumbs.db
+
+# アプリ生成物
+data/
+*.db
+*.db-journal
+*.log
+
+# Streamlit secrets（絶対に push しない）
+.streamlit/secrets.toml
+
+# 開発専用ディレクトリ・アーティファクト
+.claude/
+public/
+test_disclose*.py

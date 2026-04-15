@@ -1,17 +1,22 @@
 """株式関連ニュースフィードを複数ソースから取得するモジュール
 
-対応ソース:
+対応ソース（主要）:
   - moomoo証券 ニュース速報/ヘッドライン: スクレイピング
   - CNBC World: RSS
-  - WSJ日本版: Google News経由
-  - 四季報オンライン: Google News経由
+  - WSJ日本版 / 四季報オンライン / ロイター日本語 / ブルームバーグ日本語 / 日経: Google News経由
   - 東洋経済オンライン: RSS
-  - ロイター日本語: Google News経由
-  - ブルームバーグ日本語: Google News経由
-  - 日経: Google News経由
-  - 株探 (Kabutan): Google News経由
+  - 株探 (Kabutan): Google News経由 + 直接スクレイピング併用
   - みんかぶ: スクレイピング
   - Google News (株式市場): RSS
+
+拡張ソース:
+  - 楽天証券 トウシル (Rakuten Toushin): Google News経由
+  - マネックス マネクリ: Google News経由
+  - フィスコ (Fisco): Google News経由
+  - TRADERS WEB: Google News経由
+  - Yahoo!ファイナンス (Japan): Google News経由
+  - JPX マーケットニュース: Google News経由
+  - 四季報オンラインプレミアム: 認証Cookie経由スクレイピング（st.secrets["shikiho_premium_cookie"]）
 """
 
 import re
@@ -506,6 +511,146 @@ def fetch_google_news_market() -> list[NewsItem]:
 
 
 # ----------------------------------------------------------------
+# 追加ソース（高PVメディア）
+# ----------------------------------------------------------------
+
+def fetch_rakuten_toushin() -> list[NewsItem]:
+    """楽天証券 トウシル（個人投資家向け人気メディア）"""
+    return fetch_google_news_query(
+        "site:media.rakuten-sec.net OR site:toushil.rakuten-sec.co.jp",
+        source_label="トウシル",
+        category="投資情報",
+    )
+
+
+def fetch_monex_manekuri() -> list[NewsItem]:
+    """マネックス証券 マネクリ（マネクリニュース・投資戦略レポート）"""
+    return fetch_google_news_query(
+        "site:media.monex.co.jp OR site:info.monex.co.jp",
+        source_label="マネクリ",
+        category="投資情報",
+    )
+
+
+def fetch_fisco() -> list[NewsItem]:
+    """フィスコ（Fisco）マーケット・個別銘柄レポート"""
+    items = fetch_google_news_query(
+        "site:fisco.jp OR site:web.fisco.jp",
+        source_label="フィスコ",
+        category="市場レポート",
+    )
+    # Fiscoの一般記事（fisco.jp/news/ 直下）も補完
+    if len(items) < 10:
+        extra = fetch_google_news_query(
+            "フィスコ 株 OR 市場 OR 決算",
+            source_label="フィスコ",
+            category="市場レポート",
+            max_items=30,
+        )
+        items.extend(extra)
+    return items
+
+
+def fetch_traders_web() -> list[NewsItem]:
+    """TRADERS WEB（個別銘柄・為替・商品全般）"""
+    return fetch_google_news_query(
+        "site:traders.co.jp",
+        source_label="TRADERS WEB",
+        category="マーケット",
+    )
+
+
+def fetch_yahoo_finance_jp() -> list[NewsItem]:
+    """Yahoo!ファイナンス（Japan）"""
+    return fetch_google_news_query(
+        "site:finance.yahoo.co.jp",
+        source_label="Yahoo!ファイナンス",
+        category="株式",
+    )
+
+
+def fetch_jpx_news() -> list[NewsItem]:
+    """日本取引所グループ（JPX）公式ニュース"""
+    return fetch_google_news_query(
+        "site:jpx.co.jp",
+        source_label="JPX",
+        category="公式",
+    )
+
+
+def fetch_shikiho_premium() -> list[NewsItem]:
+    """四季報オンライン プレミアム（要ログインCookie）
+
+    利用方法:
+        Streamlit secrets.toml に以下を追加:
+            shikiho_premium_cookie = "<ブラウザで取得した Cookie ヘッダ全文>"
+
+        取得手順:
+            1. ブラウザで shikiho.toyokeizai.net にログイン
+            2. DevTools > Network > 任意のリクエスト > Request Headers > `cookie:` の値をコピー
+            3. .streamlit/secrets.toml に上記のキーで保存
+
+    Cookie が未設定の場合は空リストを返す（Google News 経由の無料版はすでに fetch_shikiho で取得済み）。
+    """
+    cookie = ""
+    try:
+        cookie = st.secrets.get("shikiho_premium_cookie", "") or ""
+    except Exception:
+        cookie = ""
+
+    if not cookie:
+        return []
+
+    items: list[NewsItem] = []
+    # プレミアム限定のニュース/コラム一覧ページ（構造はサイト側都合で変わるため失敗許容）
+    candidate_urls = [
+        "https://shikiho.toyokeizai.net/news",
+        "https://shikiho.toyokeizai.net/news/list",
+        "https://shikiho.toyokeizai.net/news/premium",
+    ]
+    headers = dict(HEADERS)
+    headers["Cookie"] = cookie
+
+    for url in candidate_urls:
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            if resp.status_code != 200:
+                continue
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for a_tag in soup.find_all("a", href=True):
+                href = a_tag.get("href", "")
+                # プレミアム記事の /news/{id} 形式を拾う
+                if not re.search(r"/news/\d+", href):
+                    continue
+                title = a_tag.get_text(strip=True)
+                if not title or len(title) < 10:
+                    continue
+                if not href.startswith("http"):
+                    href = "https://shikiho.toyokeizai.net" + href
+                items.append(NewsItem(
+                    title=title,
+                    url=href,
+                    source="四季報プレミアム",
+                    published=None,
+                    category="プレミアム",
+                ))
+            if items:
+                break
+        except Exception:
+            continue
+
+    # 重複除去
+    seen = set()
+    unique = []
+    for it in items:
+        key = re.sub(r"\s+", "", it.title)
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(it)
+    return unique[:60]
+
+
+# ----------------------------------------------------------------
 # ソース定義
 # ----------------------------------------------------------------
 
@@ -564,6 +709,42 @@ NEWS_SOURCES = {
         "func": fetch_google_news_market,
         "icon": "⚪",
         "default": False,
+    },
+    # --- 拡張ソース ---
+    "楽天証券 トウシル": {
+        "func": fetch_rakuten_toushin,
+        "icon": "🔺",
+        "default": True,
+    },
+    "マネックス マネクリ": {
+        "func": fetch_monex_manekuri,
+        "icon": "🟦",
+        "default": True,
+    },
+    "フィスコ": {
+        "func": fetch_fisco,
+        "icon": "🟩",
+        "default": True,
+    },
+    "TRADERS WEB": {
+        "func": fetch_traders_web,
+        "icon": "🟨",
+        "default": True,
+    },
+    "Yahoo!ファイナンス": {
+        "func": fetch_yahoo_finance_jp,
+        "icon": "🟪",
+        "default": True,
+    },
+    "JPX": {
+        "func": fetch_jpx_news,
+        "icon": "🏛",
+        "default": False,
+    },
+    "四季報プレミアム": {
+        "func": fetch_shikiho_premium,
+        "icon": "💎",
+        "default": False,  # Cookie必須。st.secrets["shikiho_premium_cookie"] 設定時のみ有効
     },
 }
 
@@ -642,6 +823,7 @@ _SOURCE_COLORS = {
     "moomoo":       ("#6A1B9A", "#FFFFFF"),  # 紫
     "cnbc":         ("#014099", "#FFFFFF"),  # ネイビー
     "wsj":          ("#1565C0", "#FFFFFF"),  # 青
+    "四季報プレミアム": ("#B71C1C", "#FFFFFF"),  # 深紅（プレミアム）
     "四季報":       ("#D84315", "#FFFFFF"),  # オレンジ
     "東洋経済":     ("#C62828", "#FFFFFF"),  # 赤
     "ロイター":     ("#EF6C00", "#FFFFFF"),  # オレンジ
@@ -661,6 +843,14 @@ _SOURCE_COLORS = {
     "fisco":        ("#1B8A50", "#FFFFFF"),  # 緑
     "フィスコ":     ("#1B8A50", "#FFFFFF"),
     "trader":       ("#0277BD", "#FFFFFF"),  # 水色
+    "traders":      ("#0277BD", "#FFFFFF"),
+    "トウシル":     ("#BF0000", "#FFFFFF"),  # 楽天カラー
+    "rakuten":      ("#BF0000", "#FFFFFF"),
+    "マネクリ":     ("#0097A7", "#FFFFFF"),  # マネックスカラー
+    "monex":        ("#0097A7", "#FFFFFF"),
+    "yahoo":        ("#6001D2", "#FFFFFF"),  # Yahoo紫
+    "ファイナンス": ("#6001D2", "#FFFFFF"),
+    "jpx":          ("#0D47A1", "#FFFFFF"),  # 紺
 }
 
 
@@ -690,6 +880,20 @@ def get_source_icon(source_name: str) -> str:
         return "🟢"
     if "みんかぶ" in source_name or "minkabu" in source_lower:
         return "🟡"
+    if "トウシル" in source_name or "rakuten" in source_lower:
+        return "🔺"
+    if "マネクリ" in source_name or "monex" in source_lower:
+        return "🟦"
+    if "フィスコ" in source_name or "fisco" in source_lower:
+        return "🟩"
+    if "trader" in source_lower:
+        return "🟨"
+    if "yahoo" in source_lower or "ファイナンス" in source_name:
+        return "🟪"
+    if "jpx" in source_lower:
+        return "🏛"
+    if "プレミアム" in source_name:
+        return "💎"
     return "📰"
 
 
