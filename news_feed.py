@@ -241,6 +241,93 @@ def fetch_cnbc_world() -> list[NewsItem]:
 
 
 # ----------------------------------------------------------------
+# ソース名の正規化 & ノイズ判定
+# ----------------------------------------------------------------
+
+# Google News が返すメディア名 → ダッシュボード内の正規名
+_SOURCE_CANONICAL = {
+    "Reuters": "ロイター",
+    "reuters": "ロイター",
+    "ロイター通信": "ロイター",
+    "ロイター.com": "ロイター",
+    "Bloomberg": "ブルームバーグ",
+    "Bloomberg.com": "ブルームバーグ",
+    "bloomberg.co.jp": "ブルームバーグ",
+    "投資情報のフィスコ": "フィスコ",
+    "web.fisco.jp": "フィスコ",
+    "fisco.jp": "フィスコ",
+    "トレーダーズ・ウェブ": "TRADERS WEB",
+    "traders.co.jp": "TRADERS WEB",
+    "マネックス証券": "マネクリ",
+    "media.monex.co.jp": "マネクリ",
+    "info.monex.co.jp": "マネクリ",
+    "かぶたん": "株探",
+    "kabutan.jp": "株探",
+    "株探ニュース": "株探",
+    "Yahoo!ファイナンス - Yahoo! JAPAN": "Yahoo!ファイナンス",
+    "finance.yahoo.co.jp": "Yahoo!ファイナンス",
+    "jpx.co.jp": "JPX",
+    "日本取引所グループ": "JPX",
+    "toushil.rakuten-sec.co.jp": "トウシル",
+    "media.rakuten-sec.net": "トウシル",
+    "日本経済新聞": "日経",
+    "nikkei.com": "日経",
+    "jp.wsj.com": "WSJ日本版",
+    "ウォール・ストリート・ジャーナル日本版": "WSJ日本版",
+    "shikiho.toyokeizai.net": "四季報オンライン",
+    "東洋経済オンライン": "東洋経済",
+    "toyokeizai.net": "東洋経済",
+    "minkabu.jp": "みんかぶ",
+}
+
+# タイトルにこの語が含まれていたら除外（ニュースじゃないもの）
+_NOISE_TITLE_PATTERNS = [
+    "掲示板",                        # Yahoo! の株掲示板投稿
+    "NIKKEI COMPASS",               # 日経の信用情報DBの会社ページ
+    "の会社情報と与信管理",          # NIKKEI COMPASS の定型タイトル
+    "FISCO BTC Index",              # フィスコのインデックス紹介ページ
+    "イベントスケジュール",          # 各社の経済指標カレンダー
+    "楽天証券の投資情報メディア",    # トウシルのトップページ
+    "トップ | IPO",                  # TRADERS WEB のメニュー
+    "トップ | ",                     # 各社のメニュー・トップページ
+]
+
+# タイトル全体がこの正規表現に一致したら除外
+_NOISE_EXACT_REGEX = re.compile(
+    r"^(トウシル|株探ニュース|フィスコ|TRADERS|日経|ロイター)(\s*[\-|｜].*)?$"
+)
+
+
+def _is_noise(title: str) -> bool:
+    if not title or len(title) < 8:
+        return True
+    # Yahoo!掲示板: "No.数字" で始まる / 末尾が "掲示板 YYYY/MM/DD〜" 等
+    if re.match(r"^No\.\d+", title):
+        return True
+    # 定型的なノイズ語
+    for w in _NOISE_TITLE_PATTERNS:
+        if w in title:
+            return True
+    if _NOISE_EXACT_REGEX.match(title.strip()):
+        return True
+    return False
+
+
+def _canonicalize_source(src: str, fallback: str) -> str:
+    if not src:
+        return fallback
+    # 完全一致優先
+    if src in _SOURCE_CANONICAL:
+        return _SOURCE_CANONICAL[src]
+    # 部分一致
+    low = src.lower()
+    for key, canon in _SOURCE_CANONICAL.items():
+        if key.lower() in low:
+            return canon
+    return src
+
+
+# ----------------------------------------------------------------
 # Google News 経由の各メディア
 # ----------------------------------------------------------------
 
@@ -258,6 +345,13 @@ def fetch_google_news_query(query: str, source_label: str, category: str = "株�
                 parts = title.rsplit(" - ", 1)
                 title = parts[0]
                 actual_source = parts[1] if len(parts) > 1 else source_label
+
+            # ノイズフィルタ
+            if _is_noise(title):
+                continue
+
+            # ソース名を正規化（取得メディアに寄せる）
+            actual_source = _canonicalize_source(actual_source, source_label)
 
             items.append(NewsItem(
                 title=title,
@@ -309,9 +403,9 @@ def fetch_bloomberg_japan() -> list[NewsItem]:
 
 
 def fetch_nikkei() -> list[NewsItem]:
-    """日経新聞（Google News経由）"""
+    """日経新聞（Google News経由）— NIKKEI COMPASS (会社情報DB) を除外"""
     return fetch_google_news_query(
-        "site:nikkei.com 株式 OR 市場 OR 経済",
+        "site:nikkei.com (株式 OR 市場 OR 経済) -COMPASS -与信管理",
         source_label="日経",
         category="経済",
     )
@@ -561,9 +655,9 @@ def fetch_traders_web() -> list[NewsItem]:
 
 
 def fetch_yahoo_finance_jp() -> list[NewsItem]:
-    """Yahoo!ファイナンス（Japan）"""
+    """Yahoo!ファイナンス（Japan）— 掲示板を除外するためニュース枠のみ"""
     return fetch_google_news_query(
-        "site:finance.yahoo.co.jp",
+        "site:finance.yahoo.co.jp/news -掲示板",
         source_label="Yahoo!ファイナンス",
         category="株式",
     )
@@ -796,13 +890,32 @@ def fetch_all_news(
 
     all_items.sort(key=sort_key, reverse=True)
 
-    # タイトルの重複除去
+    # タイトルの重複除去（クロスソース対応）
+    # "(ソース名)" や "- 株探ニュース" のような配信元サフィックスを除去して比較
+    _SUFFIX_RE = re.compile(
+        r"[\(（]\s*(フィスコ|株探|株探ニュース|ロイター|ブルームバーグ|"
+        r"トレーダーズ・ウェブ|TRADERS|みんかぶ|日経|東洋経済)\s*[\)）]\s*$"
+    )
+
+    def _dedup_key(title: str) -> str:
+        t = title
+        # 末尾の (配信元) を剥がす
+        while True:
+            new = _SUFFIX_RE.sub("", t).rstrip()
+            if new == t:
+                break
+            t = new
+        # 末尾の "- 配信元" も剥がす
+        t = re.sub(r"\s*[-－]\s*(フィスコ|株探.*|ロイター|ブルームバーグ)\s*$", "", t)
+        # 空白・記号を正規化
+        return re.sub(r"[\s　\u3000]+", "", t)
+
     seen_titles = set()
     unique = []
     for item in all_items:
-        normalized = re.sub(r"\s+", "", item.title)
-        if normalized not in seen_titles:
-            seen_titles.add(normalized)
+        key = _dedup_key(item.title)
+        if key and key not in seen_titles:
+            seen_titles.add(key)
             unique.append(item)
 
     return unique
