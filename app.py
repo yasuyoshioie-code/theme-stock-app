@@ -2659,8 +2659,8 @@ with tab11:
     with col_w2:
         world_auto_interval = st.selectbox(
             "自動更新間隔",
-            [("10秒", 10), ("30秒", 30), ("1分", 60), ("3分", 180), ("OFF", 0)],
-            index=0,  # デフォルト: 10秒
+            [("OFF", 0), ("1分", 60), ("3分", 180), ("5分", 300)],
+            index=0,  # デフォルト: OFF（10秒間隔だと他タブを巻き込んで頻繁にrerunされニュース取得が中断されるため）
             format_func=lambda x: x[0],
             key="world_auto_interval",
         )
