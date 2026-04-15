@@ -12,6 +12,16 @@ _APP_DIR = os.path.dirname(__file__)
 DEFAULT_XLSX = os.path.join(_APP_DIR, "default_sectors.xlsx")
 DEFAULT_PARQUET = os.path.join(_APP_DIR, "default_sectors.parquet")
 DEFAULT_DATA_PATH = DEFAULT_PARQUET if os.path.exists(DEFAULT_PARQUET) else DEFAULT_XLSX
+LIQUIDITY_CACHE_PATH = os.path.join(_APP_DIR, "liquidity_cache.parquet")
+
+
+@st.cache_data(show_spinner=False)
+def load_liquidity_cache() -> dict[str, float]:
+    """ticker → 平均売買代金(円) の辞書。ファイルがなければ空辞書。"""
+    if not os.path.exists(LIQUIDITY_CACHE_PATH):
+        return {}
+    df = pd.read_parquet(LIQUIDITY_CACHE_PATH, engine="pyarrow")
+    return dict(zip(df["ticker"], df["avg_value_yen"]))
 
 from data_loader import load_sector_data, get_all_tickers, get_sector_tickers
 from market_data import fetch_market_data_with_progress
@@ -1182,6 +1192,33 @@ with st.sidebar:
         help=f"全 {len(sectors):,} テーマから選択（デフォルトは人気30テーマ）",
     )
 
+    st.divider()
+    # 最低売買代金フィルタ（低流動性銘柄を除外し、yfinance取得対象を絞る）
+    _liq_cache = load_liquidity_cache()
+    if _liq_cache:
+        min_value_choice = st.selectbox(
+            "💰 最低平均売買代金",
+            options=[
+                ("OFF (フィルタなし)", 0),
+                ("1,000万円以上", 1e7),
+                ("5,000万円以上", 5e7),
+                ("1億円以上", 1e8),
+                ("5億円以上", 5e8),
+                ("10億円以上", 1e9),
+                ("50億円以上", 5e9),
+            ],
+            index=3,  # デフォルト: 1億円以上
+            format_func=lambda x: x[0],
+            help="閾値未満の銘柄は取得対象から除外（高速化）",
+            key="min_trading_value",
+        )
+        min_value_yen = min_value_choice[1]
+        n_above = sum(1 for v in _liq_cache.values() if v >= min_value_yen) if min_value_yen > 0 else len(_liq_cache)
+        st.caption(f"対象候補: {n_above:,}銘柄（直近30日平均）")
+    else:
+        min_value_yen = 0
+        st.caption("💡 流動性キャッシュ未生成（全銘柄取得）")
+
 # 読込結果の表示（選択中のテーマのみ表示・多いと重いので）
 with st.expander(f"📂 読み込んだセクター情報（全 {len(sectors):,} テーマ）", expanded=False):
     display_names = selected_sectors if selected_sectors else list(sectors.keys())[:20]
@@ -1200,6 +1237,7 @@ if st.button("📈 売買代金データを取得", type="primary", use_containe
     st.session_state["end_date"] = pd.Timestamp(end_date).strftime("%Y-%m-%d")
     st.session_state["freq"] = freq_map[freq]
     st.session_state["selected_sectors"] = selected_sectors
+    st.session_state["min_value_yen"] = min_value_yen
     # 前回キャッシュをクリアして再取得させる
     for _k in ["cached_data", "cached_sector_df", "cached_summary",
                "cached_detail", "cached_momentum", "cached_comparison",
@@ -1222,6 +1260,17 @@ if st.session_state.get("fetch_triggered"):
     for s in current_sectors:
         if s in sector_tickers:
             selected_tickers.update(sector_tickers[s])
+
+    # 最低売買代金フィルタ（流動性キャッシュがあれば適用）
+    _min_val = st.session_state.get("min_value_yen", 0)
+    _liq = load_liquidity_cache() if _min_val > 0 else {}
+    if _liq and _min_val > 0:
+        _before = len(selected_tickers)
+        selected_tickers = {t for t in selected_tickers if _liq.get(t, 0) >= _min_val}
+        _removed = _before - len(selected_tickers)
+        if _removed > 0:
+            st.caption(f"🔽 流動性フィルタで {_removed:,}銘柄を除外（{_min_val/1e8:.1f}億円未満）")
+
     selected_tickers = sorted(selected_tickers)
 
     if selected_tickers:
