@@ -1185,12 +1185,22 @@ if not _default_sel:
 
 with st.sidebar:
     st.divider()
-    selected_sectors = st.multiselect(
-        "表示セクター",
-        options=list(sectors.keys()),
-        default=_default_sel,
-        help=f"全 {len(sectors):,} テーマから選択（デフォルトは人気30テーマ）",
+    all_themes_mode = st.toggle(
+        f"🌐 全テーマ対象（{len(sectors):,}件）",
+        value=True,
+        help="ONなら全テーマを対象に、売買代金フィルタで銘柄数を絞ります",
+        key="all_themes_mode",
     )
+    if all_themes_mode:
+        selected_sectors = list(sectors.keys())
+        st.caption(f"✅ 全 {len(selected_sectors):,} テーマを対象（実際の取得は流動性フィルタで絞られます）")
+    else:
+        selected_sectors = st.multiselect(
+            "表示セクター",
+            options=list(sectors.keys()),
+            default=_default_sel,
+            help=f"全 {len(sectors):,} テーマから選択",
+        )
 
     st.divider()
     # 最低売買代金フィルタ（低流動性銘柄を除外し、yfinance取得対象を絞る）
