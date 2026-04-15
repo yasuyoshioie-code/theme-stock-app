@@ -7,7 +7,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # デフォルトのセクターデータファイル（アプリ内蔵）
-DEFAULT_XLSX = os.path.join(os.path.dirname(__file__), "default_sectors.xlsx")
+# Parquet が存在すればそちらを優先（1,578テーマのロードが数十秒 → 数百msに短縮）
+_APP_DIR = os.path.dirname(__file__)
+DEFAULT_XLSX = os.path.join(_APP_DIR, "default_sectors.xlsx")
+DEFAULT_PARQUET = os.path.join(_APP_DIR, "default_sectors.parquet")
+DEFAULT_DATA_PATH = DEFAULT_PARQUET if os.path.exists(DEFAULT_PARQUET) else DEFAULT_XLSX
 
 from data_loader import load_sector_data, get_all_tickers, get_sector_tickers
 from market_data import fetch_market_data_with_progress
@@ -1027,18 +1031,20 @@ with st.sidebar:
     st.header("設定")
 
     # デフォルトデータの有無を表示
-    has_default = os.path.exists(DEFAULT_XLSX)
+    has_default = os.path.exists(DEFAULT_DATA_PATH)
     if has_default:
-        st.success("✅ 内蔵データ: テーマ株40セクター")
-        with open(DEFAULT_XLSX, "rb") as _f:
-            st.download_button(
-                label="📥 内蔵データをダウンロード",
-                data=_f.read(),
-                file_name="default_sectors.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                help="40セクター × 656銘柄のテーマ株データ",
-            )
+        st.success("✅ 内蔵データ: 1,578テーマ・約3,800銘柄")
+        # xlsx があれば同時配布（ユーザーが Excel で開けるように）
+        if os.path.exists(DEFAULT_XLSX):
+            with open(DEFAULT_XLSX, "rb") as _f:
+                st.download_button(
+                    label="📥 内蔵データをダウンロード",
+                    data=_f.read(),
+                    file_name="default_sectors.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    help="1,578テーマ × 約3,800銘柄のテーマ株データ",
+                )
     uploaded_file = st.file_uploader(
         "別のデータで上書き（任意）",
         type=["xlsx"],
@@ -1119,8 +1125,8 @@ def generate_template() -> bytes:
 if uploaded_file is not None:
     data_source = uploaded_file
     data_label = "アップロードデータ"
-elif os.path.exists(DEFAULT_XLSX):
-    data_source = DEFAULT_XLSX
+elif os.path.exists(DEFAULT_DATA_PATH):
+    data_source = DEFAULT_DATA_PATH
     data_label = "内蔵データ（1,578テーマ・約3,800銘柄）"
 else:
     st.info("サイドバーからテーマ株スプレッドシート (.xlsx) をアップロードしてください。")

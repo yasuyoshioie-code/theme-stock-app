@@ -2,16 +2,21 @@ import pandas as pd
 import streamlit as st
 
 
-@st.cache_data
+@st.cache_data(show_spinner="内蔵データを読み込み中...")
 def load_sector_data(uploaded_file) -> dict[str, pd.DataFrame]:
     """xlsxファイルを読み込み、セクター名→銘柄DataFrameの辞書を返す
 
     対応フォーマット:
-    1. 各シート = 1セクター（シート名がセクター名）
-    2. 「テーマ別個別銘柄」シートに全テーマが縦に連結（■ テーマ名 で区切り）
+    1. .parquet: 列 [theme, 証券コード, 銘柄名, ticker] の高速フォーマット（推奨）
+    2. xlsx 各シート = 1セクター（シート名がセクター名）
+    3. xlsx「テーマ別個別銘柄」シートに全テーマが縦に連結（■ テーマ名 で区切り）
 
     uploaded_file: UploadedFile オブジェクト または ファイルパス文字列
     """
+    # --- Parquet 高速パス ---
+    if isinstance(uploaded_file, str) and uploaded_file.endswith(".parquet"):
+        return _load_parquet(uploaded_file)
+
     excel_file = pd.ExcelFile(uploaded_file, engine="openpyxl")
     sectors = {}
 
@@ -40,6 +45,15 @@ def load_sector_data(uploaded_file) -> dict[str, pd.DataFrame]:
         if parsed_df is not None and len(parsed_df) > 0:
             sectors[sheet_name] = parsed_df
 
+    return sectors
+
+
+def _load_parquet(path: str) -> dict[str, pd.DataFrame]:
+    """Parquetから theme→DataFrame 辞書を構築（数百ms）"""
+    df = pd.read_parquet(path, engine="pyarrow")
+    sectors: dict[str, pd.DataFrame] = {}
+    for theme, group in df.groupby("theme", sort=False):
+        sectors[theme] = group.drop(columns=["theme"]).reset_index(drop=True)
     return sectors
 
 
