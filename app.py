@@ -74,6 +74,12 @@ from world_indices import (
     get_region_color,
     REGION_ORDER,
 )
+from sector_forecast import (
+    make_us_snapshot,
+    compute_sector_forecast,
+    heat_emoji,
+    US_INDICATOR_CODES,
+)
 
 st.set_page_config(
     page_title="テーマ株セクター 売買代金ダッシュボード",
@@ -1243,54 +1249,76 @@ if st.session_state.get("fetch_triggered"):
 
 # --- タブ表示 ---
 # ニュース・市場ランキングは常に表示、売買代金系はデータ取得後に表示
-tab_pred, tab8, tab_etf, tab9, tab11, tab10, tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["🎯 明日注目銘柄", "📰 ニュース", "📦 ETF 2083組入", "📋 適時開示", "🌏 世界の株価", "📙 四季報CSV", "🏆 市場ランキング", "📊 セクター概況", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
+tab_main, tab8, tab_etf, tab9, tab11, tab10, tab7, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["🏠 ダッシュボード", "📰 ニュース", "📦 ETF 2083組入", "📋 適時開示", "🌏 世界の株価", "📙 四季報CSV", "🏆 市場ランキング", "🔥 盛り上がりランキング", "📈 時系列推移", "🔄 セクター比較", "🗂️ 銘柄別詳細", "🚀 銘柄別変化率"]
 )
 
 _NEED_DATA_MSG = "⬆️ 上の「📈 売買代金データを取得」ボタンを押してデータを取得してください。"
 
-# ===== タブ: 明日注目銘柄（NDXスコア）=====
-with tab_pred:
+# ===== 🏠 メインダッシュボード（米国市場→明日セクター→注目銘柄→本日概況）=====
+with tab_main:
+    # --- Section 1: 米国市場の動向（前日の夜間 ≒ 翌日の先行指標）---
     st.markdown(
-        '<div class="mk-section-title">🎯 翌営業日 上昇期待銘柄ランキング</div>',
+        '<div class="mk-section-title">🇺🇸 米国市場の動向（翌営業日の先行指標）</div>',
         unsafe_allow_html=True,
     )
     st.caption(
-        "世界最高レベルのトレーダー/アナリスト視点で **10種のテクニカル指標を加重平均** した "
-        "**NDXスコア**（Next-Day eXpected, 0〜100）で翌営業日に上がりやすい銘柄を可視化します。"
+        "日本市場の翌日寄り付きは、前日夜間の米国市場で大きく左右されます。"
+        "主要指標の変化をチェックし、買われやすいセクターを予測しましょう。"
     )
 
-    # --- 判断ロジック説明（折りたたみ） ---
-    with st.expander("📖 スコアリング・ロジック（判断基準）", expanded=False):
-        st.markdown("""
-### 🔬 NDXスコア = 10指標の加重平均 (0〜100)
+    # 米国市場データをキャッシュ
+    if "us_snapshot_cache" not in st.session_state:
+        with st.spinner("🌐 米国市場データ取得中..."):
+            world_items = fetch_world_indices()
+            st.session_state["us_snapshot_cache"] = make_us_snapshot(world_items)
 
-| 指標 | 重み | 判断理由 |
-|---|---|---|
-| **終値強さ** `(Close-Low)/(High-Low)` | **18%** | 高値引け=強い買い残存→翌日も継続されやすい |
-| **出来高急増** `今日vol/20日avg` | **15%** | 平均2倍以上=機関投資家の注目集中サイン |
-| **移動平均整列** `MA5>MA25>MA75` | **12%** | パーフェクトオーダー=強力な上昇トレンド |
-| **5日モメンタム** | **12%** | 短期の勢いを捕捉 |
-| **RSI(14)** | **10%** | 50-70が最適、>80は反落警戒（減点） |
-| **MACDヒストグラム** | **10%** | ゼロライン上&拡大=強気、縮小=勢い鈍化 |
-| **売買代金急増** | **8%** | 出来高×価格の総合的な注目度 |
-| **20日高値ブレイク** | **8%** | 新高値更新=抵抗突破、継続力◎ |
-| **前日比モメンタム** | **7%** | 当日の勢いを加味 |
+    col_refresh, _ = st.columns([1, 5])
+    with col_refresh:
+        if st.button("🔄 米国市場を更新", key="refresh_us_snapshot"):
+            with st.spinner("🌐 米国市場データ取得中..."):
+                world_items = fetch_world_indices()
+                st.session_state["us_snapshot_cache"] = make_us_snapshot(world_items)
 
-### ⚠️ ペナルティ項目
-- **1日+15%超の急騰** → 過熱ペナルティ（-3pt/%）
-- **ATR>8%** → 異常ボラティリティ減点
-- **薄商い銘柄** → 流動性フィルタで除外
+    us_snapshot = st.session_state["us_snapshot_cache"]
 
-### 💡 スコアの読み方
-- 🔥 **75以上**: 強い買いサイン（複数指標が揃っている）
-- 🟠 **60-75**: 買い候補（注視推奨）
-- 🟢 **45-60**: 中立（判断保留）
-- 🔴 **45未満**: 弱含み or 過熱リスク
-        """)
+    # 主要指標をメトリック表示
+    display_codes = ["211", "212", "213", "611", "621", "511", "811", "921"]
+    cols = st.columns(len(display_codes))
+    for col, code in zip(cols, display_codes):
+        item = us_snapshot.by_code.get(code)
+        name = US_INDICATOR_CODES.get(code, code)
+        with col:
+            if item is None or item.value is None:
+                st.metric(name, "—", "—")
+            else:
+                pct = item.change_pct if item.change_pct is not None else 0.0
+                st.metric(
+                    name,
+                    item.value_str,
+                    f"{pct:+.2f}%" if pct else "0.00%",
+                )
+
+    # 総合ムード
+    mood_score, mood_label = us_snapshot.mood_score()
+    st.markdown(
+        f"**米国市場の総合ムード**: {mood_label}  （スコア: {mood_score:+.1f} / ±100）"
+    )
+
+    st.divider()
+
+    # --- Section 2: 明日盛り上がりそうセクター Top 10 ---
+    st.markdown(
+        '<div class="mk-section-title">🔥 明日盛り上がりそうセクター ランキング</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "🧮 **明日温度** = NDXスコア平均 × 0.7 + (50 + 米国補正) × 0.3　"
+        "／ 銘柄別NDXスコアをセクター集計し、米国市場の相関ボーナスを加算した総合指標"
+    )
 
     if has_market_data:
-        # --- コントロール ---
+        # --- ここで pred_df を計算（Section 3 でも使う）---
         col_p1, col_p2, col_p3 = st.columns([2, 1, 1])
         with col_p1:
             pred_sector_filter = st.multiselect(
@@ -1301,7 +1329,7 @@ with tab_pred:
             )
         with col_p2:
             pred_top_n = st.selectbox(
-                "表示件数",
+                "銘柄表示件数",
                 [10, 20, 30, 50, 100],
                 index=1,
                 key="pred_top_n",
@@ -1331,11 +1359,96 @@ with tab_pred:
                 st.session_state[pred_cache_key] = pred_df
         pred_df = st.session_state[pred_cache_key]
 
+        forecast_df = compute_sector_forecast(pred_df, us_snapshot)
+
+        if not forecast_df.empty:
+            # Top 3 をカード表示
+            top3 = forecast_df.head(3)
+            card_cols = st.columns(3)
+            for i, (col, (_, row)) in enumerate(zip(card_cols, top3.iterrows())):
+                medal = ["🥇", "🥈", "🥉"][i]
+                heat = heat_emoji(row["明日温度"])
+                reason = row["US理由"] if row["US理由"] else "（US補正なし）"
+                card_html = (
+                    '<div style="background: linear-gradient(135deg, #014099 0%, #1565C0 100%);'
+                    'color: white; padding: 18px; border-radius: 12px;'
+                    'box-shadow: 0 4px 8px rgba(0,0,0,0.1); min-height: 160px;">'
+                    f'<div style="font-size: 18px; font-weight: 700;">{medal} {row["セクター"]} {heat}</div>'
+                    f'<div style="font-size: 28px; font-weight: 800; margin: 8px 0;">{row["明日温度"]:.1f}</div>'
+                    f'<div style="font-size: 12px; opacity: 0.9;">'
+                    f'NDX平均 <b>{row["NDX平均"]:.1f}</b> ／ 強気 <b>{row["強気銘柄数"]}/{row["銘柄数"]}</b></div>'
+                    f'<div style="font-size: 11px; margin-top: 8px; opacity: 0.85;">'
+                    f'📈 US補正: <b>{row["US補正"]:+.1f}</b><br/>{reason}</div>'
+                    '</div>'
+                )
+                with col:
+                    st.markdown(card_html, unsafe_allow_html=True)
+
+            st.markdown("")
+            st.markdown("**📋 明日温度ランキング Top 20**")
+            st.dataframe(
+                forecast_df.head(20),
+                use_container_width=True,
+                height=min(700, 50 + min(20, len(forecast_df)) * 35),
+            )
+
+            with st.expander("ℹ️ 明日温度スコアの読み方"):
+                st.markdown("""
+- 🔥🔥 **70以上**: 非常に盛り上がりやすい（強気銘柄集中 + US追い風）
+- 🔥 **60-70**: 買いが集まりやすい
+- 🟢 **50-60**: 平均的、注視対象
+- 🟡 **40-50**: やや弱気
+- 🔵 **40未満**: 弱含み／US逆風
+
+**US補正の仕組み**:
+各セクターはあらかじめ設定された「米国指標との相関係数」を持ち、
+その指標の変化率に応じて ±30 pt の補正を受けます。
+例: 半導体セクターは SOX 指数と強い正相関、円高メリットはドル円と負相関。
+                """)
+
+        st.divider()
+
+        # --- Section 3: 翌営業日 注目銘柄ランキング（NDXスコア）---
+        st.markdown(
+            '<div class="mk-section-title">🎯 翌営業日 上昇期待銘柄ランキング</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "世界最高レベルのトレーダー/アナリスト視点で **10種のテクニカル指標を加重平均** した "
+            "**NDXスコア**（Next-Day eXpected, 0〜100）で翌営業日に上がりやすい銘柄を可視化します。"
+        )
+
+        with st.expander("📖 スコアリング・ロジック（判断基準）", expanded=False):
+            st.markdown("""
+### 🔬 NDXスコア = 10指標の加重平均 (0〜100)
+
+| 指標 | 重み | 判断理由 |
+|---|---|---|
+| **終値強さ** `(Close-Low)/(High-Low)` | **18%** | 高値引け=強い買い残存→翌日も継続されやすい |
+| **出来高急増** `今日vol/20日avg` | **15%** | 平均2倍以上=機関投資家の注目集中サイン |
+| **移動平均整列** `MA5>MA25>MA75` | **12%** | パーフェクトオーダー=強力な上昇トレンド |
+| **5日モメンタム** | **12%** | 短期の勢いを捕捉 |
+| **RSI(14)** | **10%** | 50-70が最適、>80は反落警戒（減点） |
+| **MACDヒストグラム** | **10%** | ゼロライン上&拡大=強気、縮小=勢い鈍化 |
+| **売買代金急増** | **8%** | 出来高×価格の総合的な注目度 |
+| **20日高値ブレイク** | **8%** | 新高値更新=抵抗突破、継続力◎ |
+| **前日比モメンタム** | **7%** | 当日の勢いを加味 |
+
+### ⚠️ ペナルティ項目
+- **1日+15%超の急騰** → 過熱ペナルティ（-3pt/%）
+- **ATR>8%** → 異常ボラティリティ減点
+- **薄商い銘柄** → 流動性フィルタで除外
+
+### 💡 スコアの読み方
+- 🔥 **75以上**: 強い買いサイン（複数指標が揃っている）
+- 🟠 **60-75**: 買い候補（注視推奨）
+- 🟢 **45-60**: 中立（判断保留）
+- 🔴 **45未満**: 弱含み or 過熱リスク
+            """)
+
         if not pred_df.empty:
             filtered_pred = filter_ranking_by_sector(pred_df, pred_sector_filter)
 
-            # --- サマリーメトリクス ---
-            st.divider()
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             with col_m1:
                 st.metric("対象銘柄数", f"{len(filtered_pred):,}銘柄")
@@ -1349,7 +1462,6 @@ with tab_pred:
                 breakout_count = (filtered_pred["ブレイク"] == "✅").sum()
                 st.metric("20日高値更新", f"{breakout_count}銘柄")
 
-            # --- トップN表示 ---
             top_df = filtered_pred.head(pred_top_n)
 
             col_c1, col_c2 = st.columns([3, 4])
@@ -1360,7 +1472,6 @@ with tab_pred:
                 )
             with col_c2:
                 st.markdown(f"**🏆 Top {len(top_df)} 詳細ランキング**")
-                # 重要カラムのみ表示用に並び替え
                 display_cols = [
                     "銘柄コード", "銘柄名", "セクター", "NDXスコア",
                     "終値", "前日比(%)", "終値強さ(%)", "出来高倍率",
@@ -1373,8 +1484,6 @@ with tab_pred:
                     height=min(700, 50 + len(top_df) * 35),
                 )
 
-            # --- Top3 ハイライトカード ---
-            st.divider()
             st.markdown('<div class="mk-section-title">💎 本日のトップ3ピック</div>', unsafe_allow_html=True)
             top3_cols = st.columns(min(3, len(top_df)))
             for idx, (_, row) in enumerate(top_df.head(3).iterrows()):
@@ -1386,42 +1495,32 @@ with tab_pred:
                         bar_color = "#FFB020"
                     else:
                         bar_color = "#00E5FF"
-                    st.markdown(
-                        f'''
-                        <div style="
-                            background: linear-gradient(135deg, rgba(18,24,38,0.9) 0%, rgba(31,41,66,0.9) 100%);
-                            border: 1px solid rgba(148,163,196,0.2);
-                            border-left: 4px solid {bar_color};
-                            border-radius: 10px;
-                            padding: 16px;
-                            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-                        ">
-                            <div style="font-size:10px;color:#6B7895;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;">RANK #{idx+1}</div>
-                            <div style="font-size:18px;font-weight:700;color:#F0F3FA;margin-top:4px;">{row["銘柄名"]}</div>
-                            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#00E5FF;margin-top:2px;">
-                                {row["銘柄コード"]} · {row["セクター"]}
-                            </div>
-                            <div style="font-family:'JetBrains Mono',monospace;font-size:32px;font-weight:800;color:{bar_color};margin-top:12px;letter-spacing:-0.03em;text-shadow:0 0 20px {bar_color}66;">
-                                {score:.1f}
-                            </div>
-                            <div style="font-size:10px;color:#A8B3CD;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">NDX Score</div>
-                            <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(148,163,196,0.15);">
-                                <div style="font-size:11px;color:#A8B3CD;line-height:1.6;">
-                                    <b>終値:</b> <span style="font-family:'JetBrains Mono',monospace;">{row["終値"]:,.1f}円</span><br>
-                                    <b>前日比:</b> <span style="font-family:'JetBrains Mono',monospace;color:{'#FF5E6C' if row["前日比(%)"]>0 else '#00D9A3'};">{row["前日比(%)"]:+.2f}%</span><br>
-                                    <b>出来高:</b> <span style="font-family:'JetBrains Mono',monospace;">{row["出来高倍率"]:.2f}x</span><br>
-                                    <b>売買代金:</b> <span style="font-family:'JetBrains Mono',monospace;">{row["売買代金(億円)"]:,.1f}億円</span>
-                                </div>
-                            </div>
-                            <div style="margin-top:10px;font-size:12px;color:#F0F3FA;line-height:1.6;padding:8px 10px;background:rgba(0,229,255,0.05);border-radius:6px;border-left:2px solid #00E5FF;">
-                                💬 {row["トレーダー判断"]}
-                            </div>
-                        </div>
-                        ''',
-                        unsafe_allow_html=True,
+                    change_color = "#FF5E6C" if row["前日比(%)"] > 0 else "#00D9A3"
+                    pick_html = (
+                        '<div style="background: linear-gradient(135deg, rgba(18,24,38,0.9) 0%, rgba(31,41,66,0.9) 100%);'
+                        'border: 1px solid rgba(148,163,196,0.2);'
+                        f'border-left: 4px solid {bar_color};'
+                        'border-radius: 10px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);">'
+                        f'<div style="font-size:10px;color:#6B7895;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;">RANK #{idx+1}</div>'
+                        f'<div style="font-size:18px;font-weight:700;color:#F0F3FA;margin-top:4px;">{row["銘柄名"]}</div>'
+                        f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#00E5FF;margin-top:2px;">'
+                        f'{row["銘柄コード"]} · {row["セクター"]}</div>'
+                        f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:32px;font-weight:800;color:{bar_color};margin-top:12px;letter-spacing:-0.03em;text-shadow:0 0 20px {bar_color}66;">'
+                        f'{score:.1f}</div>'
+                        '<div style="font-size:10px;color:#A8B3CD;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">NDX Score</div>'
+                        '<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(148,163,196,0.15);">'
+                        '<div style="font-size:11px;color:#A8B3CD;line-height:1.6;">'
+                        f'<b>終値:</b> <span style="font-family:\'JetBrains Mono\',monospace;">{row["終値"]:,.1f}円</span><br>'
+                        f'<b>前日比:</b> <span style="font-family:\'JetBrains Mono\',monospace;color:{change_color};">{row["前日比(%)"]:+.2f}%</span><br>'
+                        f'<b>出来高:</b> <span style="font-family:\'JetBrains Mono\',monospace;">{row["出来高倍率"]:.2f}x</span><br>'
+                        f'<b>売買代金:</b> <span style="font-family:\'JetBrains Mono\',monospace;">{row["売買代金(億円)"]:,.1f}億円</span>'
+                        '</div></div>'
+                        '<div style="margin-top:10px;font-size:12px;color:#F0F3FA;line-height:1.6;padding:8px 10px;background:rgba(0,229,255,0.05);border-radius:6px;border-left:2px solid #00E5FF;">'
+                        f'💬 {row["トレーダー判断"]}</div>'
+                        '</div>'
                     )
+                    st.markdown(pick_html, unsafe_allow_html=True)
 
-            st.divider()
             st.caption(
                 "⚠️ **重要**: NDXスコアはテクニカル指標のみに基づく統計的ランキングです。"
                 "実際の投資判断は、企業ファンダメンタルズ・業績・ニュース・市況・マクロ環境を総合して行ってください。"
@@ -1429,24 +1528,26 @@ with tab_pred:
             )
         else:
             st.warning("⚠️ 計算対象の銘柄がありません。流動性フィルタを緩めるか、期間を長くしてデータを再取得してください。")
+
+        st.divider()
+
+        # --- Section 4: 本日のセクター概況（既存UIを維持）---
+        st.markdown(
+            '<div class="mk-section-title">📊 本日のセクター概況</div>',
+            unsafe_allow_html=True,
+        )
+        st.plotly_chart(sector_bar_chart(summary), use_container_width=True)
+        with st.expander("📋 セクター別サマリー（詳細）", expanded=False):
+            st.dataframe(summary, use_container_width=True)
     else:
         st.info(_NEED_DATA_MSG)
         st.markdown("""
         ##### 📌 使い方
         1. 左サイドバーで**期間を1ヶ月以上**に設定（テクニカル指標の精度のため）
         2. 📈 **売買代金データを取得** ボタンを押す
-        3. このタブで **NDXスコア** ランキングが自動計算される
-        4. **15:30 の日本市場引け後**に見れば、翌営業日の注目銘柄が一目瞭然
+        3. このダッシュボードで **米国市場 → 明日注目セクター → 注目銘柄** が一覧できる
+        4. **15:30 の日本市場引け後**にチェック
         """)
-
-# ===== タブ1: セクター概況 =====
-with tab1:
-    if has_market_data:
-        st.plotly_chart(sector_bar_chart(summary), use_container_width=True)
-        st.subheader("セクター別サマリー")
-        st.dataframe(summary, use_container_width=True)
-    else:
-        st.info(_NEED_DATA_MSG)
 
 # ===== タブ2: 盛り上がりランキング（新機能） =====
 with tab2:
