@@ -3,6 +3,7 @@ streamlit-autorefresh>=1.0
 pandas>=2.0
 numpy>=1.26
 openpyxl>=3.1
+pyarrow>=15.0
 yfinance>=0.2.51
 plotly>=5.18
 beautifulsoup4>=4.12
