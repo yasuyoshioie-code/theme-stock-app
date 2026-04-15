@@ -1308,7 +1308,16 @@ if st.session_state.get("fetch_triggered"):
 
             # 集計結果もキャッシュ
             if "cached_summary" not in st.session_state:
-                filtered_sector_tickers = {k: v for k, v in sector_tickers.items() if k in current_sectors}
+                # 取得できた銘柄を持つセクターだけに絞る（1,578 → 実質数百セクター）
+                _avail_set = set(available)
+                filtered_sector_tickers = {}
+                for k in current_sectors:
+                    v = sector_tickers.get(k)
+                    if not v:
+                        continue
+                    valid = [t for t in v if t in _avail_set]
+                    if valid:
+                        filtered_sector_tickers[k] = valid
                 sector_df = aggregate_by_sector(data, filtered_sector_tickers, freq=current_freq)
                 summary = get_sector_summary(sector_df)
                 detail = get_stock_detail(data, filtered_sector_tickers, sectors)
@@ -1506,9 +1515,16 @@ with tab_main:
         pred_cache_key = f"next_day_{pred_min_turnover}"
         if pred_cache_key not in st.session_state:
             with st.spinner("🔍 テクニカル指標を計算中..."):
-                filtered_sector_tickers = {
-                    k: v for k, v in sector_tickers.items() if k in current_sectors
-                }
+                # 取得済み銘柄を持つセクターだけに絞る（処理対象を激減）
+                _avail_set = set(available)
+                filtered_sector_tickers = {}
+                for k in current_sectors:
+                    v = sector_tickers.get(k)
+                    if not v:
+                        continue
+                    valid = [t for t in v if t in _avail_set]
+                    if valid:
+                        filtered_sector_tickers[k] = valid
                 pred_df = get_next_day_ranking(
                     data,
                     filtered_sector_tickers,
