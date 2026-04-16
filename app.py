@@ -24,7 +24,6 @@ def load_liquidity_cache() -> dict[str, float]:
     return dict(zip(df["ticker"], df["avg_value_yen"]))
 
 from data_loader import load_sector_data, get_all_tickers, get_sector_tickers
-from market_data import fetch_market_data_with_progress
 from ranking_data import (
     fetch_trading_value_ranking,
     build_ticker_to_themes,
@@ -34,15 +33,7 @@ from ranking_data import (
     compute_sector_flow_trend,
     compute_flow_change,
 )
-from analysis import (
-    aggregate_by_sector,
-    get_sector_summary,
-    get_stock_detail,
-    get_momentum_ranking,
-    get_period_comparison,
-    get_hot_sectors,
-    get_stock_momentum,
-)
+from tomorrow_pick import compute_tomorrow_picks
 from charts import (
     sector_bar_chart,
     timeseries_chart,
@@ -1332,74 +1323,94 @@ with tab_main:
 
     st.divider()
 
-    # --- Section 2: テーマ別 資金流入ランキング ---
+    # --- Section 2: 明日上がりそうな銘柄（メインコンテンツ）---
     st.markdown(
-        '<div class="mk-section-title">💰 テーマ別 資金流入ランキング（売買代金Top100×3市場）</div>',
+        '<div class="mk-section-title">🚀 明日上がりそうな銘柄 — 5層AI分析</div>',
         unsafe_allow_html=True,
     )
     st.caption(
-        "プライム/スタンダード/グロース各市場の売買代金Top100（計300銘柄）を "
-        f"1,578テーマに自動マッピング。**{len(theme_df)}テーマ**に資金が集まっています。"
+        "売買代金ランキング + 値上がり率 + 出来高急増 + 米国セクターETF + テーマ人気度 の5層分析で総合スコアを算出"
     )
 
-    if has_market_data:
-        # Top3 カード
-        _top3_themes = theme_df.head(3)
-        _t3_cols = st.columns(3)
-        for _i, (_col_t, (_, _tr)) in enumerate(zip(_t3_cols, _top3_themes.iterrows())):
-            _medal = ["🥇", "🥈", "🥉"][_i]
-            _chg = _tr["平均変化率(%)"]
-            _chg_color = "#FF5E6C" if _chg > 0 else "#00D9A3" if _chg < 0 else "#FFFFFF"
-            _card = (
-                '<div style="background: linear-gradient(135deg, #014099 0%, #1565C0 100%);'
-                'color: white; padding: 18px; border-radius: 12px;'
-                'box-shadow: 0 4px 8px rgba(0,0,0,0.1); min-height: 140px;">'
-                f'<div style="font-size: 18px; font-weight: 700;">{_medal} {_tr["テーマ"]}</div>'
-                f'<div style="font-size: 28px; font-weight: 800; margin: 8px 0;">{_tr["売買代金(億円)"]:,}億円</div>'
-                f'<div style="font-size: 13px; opacity: 0.9;">'
-                f'{_tr["銘柄数"]}銘柄 ／ 平均変化率 <span style="color:{_chg_color};font-weight:700;">{_chg:+.1f}%</span></div>'
-                f'<div style="font-size: 11px; margin-top: 6px; opacity: 0.8;">代表: {_tr["代表銘柄"]}</div>'
-                '</div>'
+    # スコアリング実行（キャッシュ）
+    if "tomorrow_picks" not in st.session_state:
+        with st.spinner("🔍 5層分析中（ランキング取得→米国連動→テーマ分析）..."):
+            # USSnapshotから _score_macro 用の辞書を構築
+            _us_dict = None
+            if us_snapshot and hasattr(us_snapshot, "by_code"):
+                _code_map = {"611": "sox", "212": "nasdaq", "213": "sp500", "211": "dow", "621": "vix", "311": "usdjpy"}
+                _us_dict = {}
+                for code, key in _code_map.items():
+                    item = us_snapshot.by_code.get(code)
+                    if item and item.change_pct is not None:
+                        _us_dict[key] = {"change_pct": float(item.change_pct)}
+            _picks = compute_tomorrow_picks(
+                _ticker_to_themes,
+                etf_perfs=etf_perfs,
+                us_snapshot=_us_dict,
             )
-            with _col_t:
-                st.markdown(_card, unsafe_allow_html=True)
+            st.session_state["tomorrow_picks"] = _picks
+    _picks = st.session_state["tomorrow_picks"]
 
-        st.markdown("")
+    _col_refresh, _ = st.columns([1, 5])
+    with _col_refresh:
+        if st.button("🔄 再分析", key="refresh_picks"):
+            st.session_state.pop("tomorrow_picks", None)
+            fetch_us_sector_performance.clear()
+            st.rerun()
 
-        # Top 30 テーブル
-        _show_n = st.selectbox("表示件数", [20, 30, 50, 100], index=1, key="theme_top_n")
-        _display_theme = theme_df.head(_show_n)[["テーマ", "売買代金(億円)", "銘柄数", "平均変化率(%)", "代表銘柄"]].copy()
-        _display_theme.index = range(1, len(_display_theme) + 1)
-        _display_theme.index.name = "順位"
-        st.dataframe(_display_theme, use_container_width=True, height=min(800, 50 + _show_n * 35))
+    # 3市場タブ
+    _tab_prime, _tab_std, _tab_growth = st.tabs(["🏛️ プライム", "📗 スタンダード", "🌱 グロース"])
 
-        st.divider()
+    for _tab, _mkt_name in [(_tab_prime, "プライム"), (_tab_std, "スタンダード"), (_tab_growth, "グロース")]:
+        with _tab:
+            _mkt_df = _picks.get(_mkt_name, pd.DataFrame())
+            if _mkt_df.empty:
+                st.info(f"{_mkt_name}のデータがありません")
+                continue
 
-        # --- Section 3: 売買代金 銘柄ランキング ---
-        st.markdown(
-            '<div class="mk-section-title">🏆 売買代金 銘柄ランキング（市場別）</div>',
-            unsafe_allow_html=True,
-        )
-        _mkt_tabs = st.tabs(["全市場", "プライム", "スタンダード", "グロース"])
-        for _mt, _mlabel in zip(_mkt_tabs, ["全市場", "プライム", "スタンダード", "グロース"]):
-            with _mt:
-                if _mlabel == "全市場":
-                    _mkt_df = ranking_df.copy()
-                else:
-                    _mkt_df = ranking_df[ranking_df["market_label"] == _mlabel].copy()
-                if not _mkt_df.empty:
-                    _mkt_df = _mkt_df.sort_values("売買代金", ascending=False).head(30)
-                    _mkt_display = _mkt_df[["コード", "名称", "market_label", "取引値", "前日比率(%)", "売買代金"]].copy()
-                    _mkt_display["売買代金(億円)"] = (_mkt_display["売買代金"] / 1e8).round(0).astype(int)
-                    _mkt_display = _mkt_display.drop(columns=["売買代金"])
-                    _mkt_display.columns = ["コード", "銘柄名", "市場", "取引値", "前日比(%)", "売買代金(億円)"]
-                    _mkt_display.index = range(1, len(_mkt_display) + 1)
-                    _mkt_display.index.name = "順位"
-                    st.dataframe(_mkt_display, use_container_width=True, height=min(600, 50 + len(_mkt_display) * 35))
-                else:
-                    st.info("データなし")
-    else:
-        st.warning("ランキングデータの取得に失敗しました。🔄 更新ボタンを押してください。")
+            # Top3 カード
+            _top3 = _mkt_df.head(3)
+            _t3c = st.columns(3)
+            for _i, (_col, (_, _r)) in enumerate(zip(_t3c, _top3.iterrows())):
+                _medal = ["🥇", "🥈", "🥉"][_i]
+                _sc = _r["総合スコア"]
+                _chg = _r["前日比(%)"]
+                _chg_c = "#FF5E6C" if _chg > 0 else "#00D9A3" if _chg < 0 else "#FFFFFF"
+                _bar_c = "#FF5E6C" if _sc >= 80 else "#FFB020" if _sc >= 65 else "#00E5FF"
+                _sig = _r["シグナル"][:60] if _r["シグナル"] != "—" else ""
+                _themes = _r["注目テーマ"][:40] if _r["注目テーマ"] != "—" else ""
+                _card = (
+                    '<div style="background:linear-gradient(135deg,rgba(18,24,38,0.95),rgba(31,41,66,0.95));'
+                    f'border-left:4px solid {_bar_c};border-radius:12px;padding:16px;min-height:200px;'
+                    'box-shadow:0 4px 16px rgba(0,0,0,0.3);">'
+                    f'<div style="font-size:10px;color:#6B7895;letter-spacing:0.1em;font-weight:700;">{_medal} RANK #{_i+1}</div>'
+                    f'<div style="font-size:18px;font-weight:700;color:#F0F3FA;margin-top:4px;">{_r["銘柄名"]}</div>'
+                    f'<div style="font-size:11px;color:#00E5FF;">{_r["コード"]}</div>'
+                    f'<div style="font-size:32px;font-weight:800;color:{_bar_c};margin:8px 0;letter-spacing:-0.03em;">{_sc:.1f}</div>'
+                    '<div style="font-size:11px;color:#A8B3CD;line-height:1.6;">'
+                    f'前日比 <span style="color:{_chg_c};font-weight:700;">{_chg:+.2f}%</span> ／ '
+                    f'売買代金 <b>{_r["売買代金(億円)"]:,}億</b></div>'
+                    f'<div style="font-size:10px;color:#8899BB;margin-top:8px;line-height:1.5;">{_sig}</div>'
+                    f'<div style="font-size:10px;color:#5577AA;margin-top:4px;">📌 {_themes}</div>'
+                    '</div>'
+                )
+                with _col:
+                    st.markdown(_card, unsafe_allow_html=True)
+
+            st.markdown("")
+
+            # 全銘柄テーブル
+            _show_cols = ["順位", "コード", "銘柄名", "総合スコア", "取引値", "前日比(%)",
+                          "売買代金(億円)", "シグナル", "注目テーマ"]
+            _detail_cols = _show_cols + ["S売買", "Sモメ", "S米国", "Sテーマ", "Sマクロ"]
+            _avail_cols = [c for c in _detail_cols if c in _mkt_df.columns]
+            st.dataframe(
+                _mkt_df[_avail_cols],
+                use_container_width=True,
+                height=min(800, 50 + len(_mkt_df) * 35),
+                hide_index=True,
+            )
 
 # ===== タブ2: 盛り上がりランキング（新機能） =====
 # ===== 💰 セクター資金フロー タブ =====
