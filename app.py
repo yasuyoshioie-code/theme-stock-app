@@ -1229,11 +1229,13 @@ with st.sidebar:
         min_value_yen = 0
         st.caption("💡 流動性キャッシュ未生成（全銘柄取得）")
 
-# 読込結果の表示（選択中のテーマのみ表示・多いと重いので）
-with st.expander(f"📂 読み込んだセクター情報（全 {len(sectors):,} テーマ）", expanded=False):
-    display_names = selected_sectors if selected_sectors else list(sectors.keys())[:20]
-    st.caption(f"選択中の {len(display_names)} テーマを表示（全件は非表示）")
-    for name in display_names:
+# 読込結果の表示（最大20テーマまで。1,578テーマ全部描画するとフリーズする）
+_MAX_DISPLAY = 20
+_display_names = selected_sectors[:_MAX_DISPLAY] if len(selected_sectors) > _MAX_DISPLAY else selected_sectors
+with st.expander(f"📂 セクター情報（全 {len(sectors):,} テーマ中 {len(_display_names)} 件表示）", expanded=False):
+    if len(selected_sectors) > _MAX_DISPLAY:
+        st.caption(f"⚡ 先頭 {_MAX_DISPLAY} テーマのみ表示（全テーマモード時は省略）")
+    for name in _display_names:
         df = sectors.get(name)
         if df is None:
             continue
