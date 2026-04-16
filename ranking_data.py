@@ -112,10 +112,19 @@ def map_ranking_to_themes(
 ) -> pd.DataFrame:
     """ランキング → テーマ別売買代金集計
 
+    代表銘柄はテーマ固有度（= 売買代金 / 所属テーマ数）が最大の銘柄を選ぶ。
+    これにより、多数のテーマに属する超大型株（キオクシア等）ではなく
+    そのテーマに特化した銘柄が代表として表示される。
+
     Returns:
         columns: [テーマ, 売買代金合計, 銘柄数, 平均変化率(%), 代表銘柄]
         sorted by 売買代金合計 desc
     """
+    # 各銘柄のテーマ所属数を事前計算
+    _theme_count: dict[str, int] = {
+        code: len(themes) for code, themes in ticker_to_themes.items()
+    }
+
     theme_stats: dict[str, dict] = {}
 
     for _, row in ranking_df.iterrows():
@@ -124,6 +133,7 @@ def map_ranking_to_themes(
         tv = float(row.get("売買代金", 0) or 0)
         chg = float(row.get("前日比率(%)", 0) or 0)
         name = str(row.get("名称", ""))
+        n_themes = _theme_count.get(code, 999)
 
         for th in themes:
             if th not in theme_stats:
@@ -131,14 +141,17 @@ def map_ranking_to_themes(
                     "売買代金合計": 0.0,
                     "銘柄数": 0,
                     "_chg_sum": 0.0,
-                    "_top_stock": ("", 0.0),
+                    # (name, n_themes, tv) — n_themesが小さいほど特化度が高い
+                    "_top_stock": ("", 999, 0.0),
                 }
             s = theme_stats[th]
             s["売買代金合計"] += tv
             s["銘柄数"] += 1
             s["_chg_sum"] += chg
-            if tv > s["_top_stock"][1]:
-                s["_top_stock"] = (name, tv)
+            cur = s["_top_stock"]
+            # 特化度優先: 所属テーマ数が少ない方を優先、同数なら売買代金で決定
+            if n_themes < cur[1] or (n_themes == cur[1] and tv > cur[2]):
+                s["_top_stock"] = (name, n_themes, tv)
 
     rows = []
     for th, s in theme_stats.items():
