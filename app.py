@@ -25,30 +25,17 @@ def load_liquidity_cache() -> dict[str, float]:
 
 from data_loader import load_sector_data, get_all_tickers, get_sector_tickers
 from ranking_data import (
-    fetch_trading_value_ranking,
     build_ticker_to_themes,
-    map_ranking_to_themes,
     save_daily_snapshot,
-    load_theme_history,
-    compute_sector_flow_trend,
-    compute_flow_change,
+    map_ranking_to_themes,
+)
+from theme_performance import (
+    fetch_all_ranking_data,
+    compute_theme_performance,
+    build_treemap_data,
+    get_theme_detail,
 )
 from tomorrow_pick import compute_tomorrow_picks
-from charts import (
-    sector_bar_chart,
-    timeseries_chart,
-    momentum_bar_chart,
-    week_change_bar_chart,
-    period_change_bar_chart,
-    comparison_bar_chart,
-    normalized_chart,
-    stock_detail_bar,
-    stock_momentum_bar_chart,
-    stock_change_heatmap,
-    market_ranking_bar,
-    next_day_ranking_bar,
-)
-from next_day_ranking import get_next_day_ranking, filter_ranking_by_sector
 from news_analyzer import analyze_news_item, build_stock_index
 from etf2083_ui import render_etf2083_tab
 from market_ranking import (
@@ -1168,50 +1155,134 @@ with st.expander(f"📂 セクター情報（全 {len(sectors):,} テーマ中 {
         st.dataframe(df[["証券コード", "銘柄名"]].reset_index(drop=True), hide_index=True, height=150)
 
 # ================================================================
-# 売買代金ランキング自動取得（ページロード時・10分キャッシュ）
+# データ取得（ページロード時・自動・10分キャッシュ）
 # ================================================================
 _ticker_to_themes = build_ticker_to_themes(sectors)
 
-# ランキングデータ取得（キャッシュ10分 / ボタンで強制更新可）
-_col_rank_btn1, _col_rank_btn2 = st.columns([3, 1])
-with _col_rank_btn1:
-    st.caption(f"📊 売買代金ランキング（プライム/スタンダード/グロース 各Top100 = 300銘柄 → {len(sectors):,}テーマにマッピング）")
-with _col_rank_btn2:
-    if st.button("🔄 更新", key="refresh_ranking", use_container_width=True):
-        fetch_trading_value_ranking.clear()
-        for _k in list(st.session_state.keys()):
-            if _k.startswith("ranking_") or _k.startswith("theme_") or _k.startswith("next_day_"):
-                st.session_state.pop(_k, None)
-
-ranking_df = fetch_trading_value_ranking()
+# 全ランキング取得 → テーマ騰落率計算
+ranking_df = fetch_all_ranking_data()
 if not ranking_df.empty:
-    theme_df = map_ranking_to_themes(ranking_df, _ticker_to_themes)
-    # スナップショット保存（1日1回）
-    save_daily_snapshot(ranking_df, theme_df)
-    _n_matched = ranking_df["コード"].apply(lambda c: str(c).strip() in _ticker_to_themes).sum()
-    st.success(f"✅ {len(ranking_df)}銘柄取得 → {_n_matched}銘柄がテーママッチ → {len(theme_df)}テーマに集計済み")
+    theme_perf = compute_theme_performance(ranking_df, _ticker_to_themes)
+    # スナップショット保存
+    _theme_map = map_ranking_to_themes(ranking_df, _ticker_to_themes)
+    save_daily_snapshot(ranking_df, _theme_map)
 else:
-    theme_df = pd.DataFrame()
-    st.warning("ランキングデータを取得できませんでした。")
+    theme_perf = pd.DataFrame()
 
-has_market_data = not theme_df.empty
+has_data = not theme_perf.empty
 
-# --- タブ表示 ---
-# ニュース・市場ランキングは常に表示、売買代金系はデータ取得後に表示
-tab_main, tab_flow, tab8, tab_etf, tab9, tab11, tab10, tab7 = st.tabs(
-    ["🏠 ダッシュボード", "💰 セクター資金フロー", "📰 ニュース", "📦 ETF 2083組入", "📋 適時開示", "🌏 世界の株価", "📙 四季報CSV", "🏆 市場ランキング"]
+# --- タブ構成 ---
+tab_themes, tab_map, tab_picks, tab8, tab_etf, tab9, tab11, tab10, tab7 = st.tabs(
+    ["🔥 テーマ騰落", "🗺️ マップ", "🚀 明日の注目", "📰 ニュース", "📦 ETF 2083組入", "📋 適時開示", "🌏 世界の株価", "📙 四季報CSV", "🏆 市場ランキング"]
 )
 
 # ===== 🏠 メインダッシュボード（米国市場→明日セクター→注目銘柄→本日概況）=====
-with tab_main:
-    # --- Section 1: 米国市場の動向（前日の夜間 ≒ 翌日の先行指標）---
+# ===== 🔥 テーマ騰落 タブ =====
+with tab_themes:
+    st.markdown('<div class="mk-section-title">🔥 テーマ別騰落率ランキング</div>', unsafe_allow_html=True)
+    st.caption(f"売買代金/値上がり/値下がりランキングの{len(ranking_df)}銘柄 → {len(theme_perf):,}テーマにマッピング。騰落率=構成銘柄の前日比%の単純平均。")
+
+    if has_data:
+        # 更新ボタン
+        _cr1, _cr2 = st.columns([5, 1])
+        with _cr2:
+            if st.button("🔄 更新", key="refresh_themes", use_container_width=True):
+                fetch_all_ranking_data.clear()
+                st.session_state.pop("tomorrow_picks", None)
+                st.rerun()
+
+        # フィルタ: 最低銘柄数
+        _min_stocks = st.select_slider("最低銘柄数", options=[1, 2, 3, 5, 10, 15, 20], value=3, key="min_stocks_filter")
+        _filtered = theme_perf[theme_perf["銘柄数"] >= _min_stocks].reset_index(drop=True)
+
+        # サマリ指標
+        _c1, _c2, _c3, _c4 = st.columns(4)
+        _n_up = (_filtered["騰落率(%)"] > 0).sum()
+        _n_dn = (_filtered["騰落率(%)"] < 0).sum()
+        with _c1:
+            st.metric("テーマ数", f"{len(_filtered):,}")
+        with _c2:
+            st.metric("上昇テーマ", f"{_n_up}", delta=f"{_n_up / max(len(_filtered),1)*100:.0f}%")
+        with _c3:
+            st.metric("下落テーマ", f"{_n_dn}")
+        with _c4:
+            _avg = _filtered["騰落率(%)"].mean()
+            st.metric("全テーマ平均", f"{_avg:+.2f}%")
+
+        # テーマ一覧テーブル（騰落率で色付き）
+        _display = _filtered[["テーマ", "騰落率(%)", "銘柄数", "上昇", "下落", "売買代金(億円)", "代表銘柄"]].copy()
+        _display.index = range(1, len(_display) + 1)
+        _display.index.name = "#"
+
+        st.dataframe(
+            _display,
+            use_container_width=True,
+            height=min(900, 50 + len(_display) * 35),
+            column_config={
+                "騰落率(%)": st.column_config.NumberColumn(format="%.2f%%"),
+                "売買代金(億円)": st.column_config.NumberColumn(format="%d"),
+            },
+        )
+
+        # テーマ詳細（展開）
+        with st.expander("🔍 テーマの構成銘柄を見る"):
+            _sel_theme = st.selectbox("テーマを選択", options=_filtered["テーマ"].tolist(), key="theme_detail_sel")
+            if _sel_theme:
+                _detail = get_theme_detail(_sel_theme, ranking_df, _ticker_to_themes)
+                if not _detail.empty:
+                    st.dataframe(_detail, use_container_width=True, hide_index=True)
+                else:
+                    st.info("ランキング内に該当銘柄がありません")
+    else:
+        st.warning("データ取得に失敗しました。")
+
+# ===== 🗺️ マップ タブ（ツリーマップ）=====
+with tab_map:
+    st.markdown('<div class="mk-section-title">🗺️ テーマ マップ</div>', unsafe_allow_html=True)
+    st.caption("テーマの売買代金（サイズ）× 騰落率（色）で一目で市場の資金の流れを把握")
+
+    if has_data:
+        import plotly.express as px
+
+        _tm_n = st.select_slider("表示テーマ数", options=[30, 50, 80, 100, 150], value=80, key="treemap_n")
+        _tm_data = build_treemap_data(theme_perf[theme_perf["銘柄数"] >= 2], top_n=_tm_n)
+
+        if not _tm_data.empty:
+            _fig = px.treemap(
+                _tm_data,
+                path=["カテゴリ", "テーマ"],
+                values="売買代金(億円)",
+                color="騰落率(%)",
+                color_continuous_scale=["#ef4444", "#6b7280", "#22c55e"],
+                color_continuous_midpoint=0,
+                hover_data={"銘柄数": True, "売買代金(億円)": True, "騰落率(%)": ":.2f%"},
+                title="",
+            )
+            _fig.update_layout(
+                height=700,
+                margin=dict(t=30, l=0, r=0, b=0),
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="white"),
+            )
+            _fig.update_traces(
+                textinfo="label+value",
+                texttemplate="<b>%{label}</b><br>%{customdata[1]:,}億",
+            )
+            st.plotly_chart(_fig, use_container_width=True)
+        else:
+            st.info("ツリーマップデータなし")
+    else:
+        st.warning("データ取得に失敗しました。")
+
+# ===== 🚀 明日の注目 タブ =====
+with tab_picks:
+    # --- 米国市場の動向 ---
     st.markdown(
         '<div class="mk-section-title">🇺🇸 米国市場の動向（翌営業日の先行指標）</div>',
         unsafe_allow_html=True,
     )
     st.caption(
         "日本市場の翌日寄り付きは、前日夜間の米国市場で大きく左右されます。"
-        "主要指標の変化をチェックし、買われやすいセクターを予測しましょう。"
     )
 
     # 米国市場データをキャッシュ
@@ -1412,51 +1483,6 @@ with tab_main:
                 hide_index=True,
             )
 
-# ===== タブ2: 盛り上がりランキング（新機能） =====
-# ===== 💰 セクター資金フロー タブ =====
-with tab_flow:
-    st.subheader("💰 セクター資金フロー分析")
-    st.caption("日次スナップショットを蓄積し、テーマ別の資金流入トレンドを追跡します。")
-
-    # 蓄積データの読み込み
-    _theme_hist = load_theme_history(days=30)
-    if not _theme_hist.empty:
-        _n_days = _theme_hist["snapshot_date"].nunique()
-        st.info(f"📁 蓄積データ: {_n_days}日分（直近30日）")
-
-        # 資金フロー推移チャート
-        _flow_pivot = compute_sector_flow_trend(_theme_hist, top_n=15)
-        if not _flow_pivot.empty and len(_flow_pivot) > 1:
-            import plotly.express as px
-            _fig = px.line(
-                _flow_pivot.reset_index(),
-                x="snapshot_date",
-                y=_flow_pivot.columns.tolist(),
-                title="テーマ別 売買代金推移（億円）Top 15",
-                labels={"value": "売買代金(億円)", "snapshot_date": "日付", "variable": "テーマ"},
-            )
-            _fig.update_layout(height=500, legend=dict(font=dict(size=10)))
-            st.plotly_chart(_fig, use_container_width=True)
-
-        # 資金フロー変化率
-        _flow_chg = compute_flow_change(_theme_hist, compare_days=5)
-        if not _flow_chg.empty:
-            st.markdown("**📈 資金フロー変化（直近 vs 5日前）**")
-            st.dataframe(
-                _flow_chg.head(30),
-                use_container_width=True,
-                height=min(600, 50 + 30 * 35),
-            )
-    else:
-        st.info("📁 蓄積データはまだありません。毎日アクセスするとスナップショットが自動保存され、トレンドが表示されます。")
-
-    # 本日のテーマ売買代金（参考表示）
-    if has_market_data:
-        with st.expander("📊 本日のテーマ別売買代金（全件）", expanded=False):
-            _all_theme = theme_df[["テーマ", "売買代金(億円)", "銘柄数", "平均変化率(%)", "代表銘柄"]].copy()
-            _all_theme.index = range(1, len(_all_theme) + 1)
-            _all_theme.index.name = "順位"
-            st.dataframe(_all_theme, use_container_width=True, height=600)
 
 
 # ===== タブ7: 市場ランキング =====
