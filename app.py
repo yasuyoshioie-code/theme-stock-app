@@ -2511,7 +2511,4 @@ with tab10:
 
 # フッター
 st.divider()
-if has_market_data:
-    st.caption(f"データ期間: {start_str} 〜 {end_str} | 集計単位: {freq} | データソース: Yahoo Finance (yfinance)")
-else:
-    st.caption("データソース: Yahoo Finance (yfinance) | ニュース・市場ランキングは売買代金データ取得不要で利用できます")
+st.caption("データソース: Yahoo Finance Japan（売買代金ランキング） / yfinance（米国ETF） / RSS・スクレイピング（ニュース）")
