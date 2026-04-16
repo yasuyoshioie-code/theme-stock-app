@@ -36,32 +36,60 @@ MARKETS = {
 # 1. 売買代金ランキング取得
 # ------------------------------------------------------------------
 
+# 市場コード → 表示名マッピング
+_MARKET_LABEL_MAP = {
+    "東証PRM": "プライム",
+    "東証STD": "スタンダード",
+    "東証GRT": "グロース",
+    "東証ETF": "ETF",
+}
+
+
 @st.cache_data(ttl=600, show_spinner=False)
-def fetch_trading_value_ranking(
-    markets: tuple[str, ...] = ("プライム", "スタンダード", "グロース"),
-    pages: int = 2,
-) -> pd.DataFrame:
-    """3市場の売買代金Top100を取得（10分キャッシュ）
+def fetch_trading_value_ranking() -> pd.DataFrame:
+    """売買代金ランキングを取得し、「市場」列で正確に分類（10分キャッシュ）
+
+    Yahoo Finance Japan は市場パラメータを指定しても他市場銘柄が混入するため、
+    全市場200件 + スタンダード100件 + グロース100件 を取得して
+    「市場」列（東証PRM/STD/GRT/ETF）で正しく分類・重複排除する。
 
     Returns:
         columns: [順位, コード, 名称, 市場, 取引値, 前日比率(%), 売買代金, market_label]
     """
     frames = []
-    for mname in markets:
-        mkey = MARKETS.get(mname)
-        if not mkey:
-            continue
-        df = fetch_ranking_via_read_html("売買代金上位", market=mkey, pages=pages)
-        if not df.empty:
-            df["market_label"] = mname
-            frames.append(df)
+
+    # 全市場から200件（プライム上位が大半を占める）
+    df_all = fetch_ranking_via_read_html("売買代金上位", market="all", pages=4)
+    if not df_all.empty:
+        frames.append(df_all)
+
+    # スタンダード・グロースは個別に100件取得（全市場ランキングに入らない銘柄を補完）
+    for mkey in ("tokyo2", "tokyog"):
+        df_sub = fetch_ranking_via_read_html("売買代金上位", market=mkey, pages=2)
+        if not df_sub.empty:
+            frames.append(df_sub)
+
     if not frames:
         return pd.DataFrame()
+
     combined = pd.concat(frames, ignore_index=True)
+
     # 必須列の確保
-    for col in ("売買代金", "前日比率(%)"):
+    for col in ("売買代金", "前日比率(%)", "市場"):
         if col not in combined.columns:
-            combined[col] = 0.0
+            combined[col] = 0.0 if col != "市場" else ""
+
+    # 「市場」列で正確に market_label を設定
+    combined["market_label"] = combined["市場"].map(_MARKET_LABEL_MAP).fillna("その他")
+
+    # 重複排除（同じ銘柄コードは売買代金が大きい方を残す）
+    combined = combined.sort_values("売買代金", ascending=False)
+    combined = combined.drop_duplicates(subset=["コード"], keep="first")
+
+    # 市場ごとに順位を振り直し
+    combined = combined.sort_values("売買代金", ascending=False).reset_index(drop=True)
+    combined["順位"] = combined.index + 1
+
     return combined
 
 
