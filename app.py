@@ -36,6 +36,7 @@ from theme_performance import (
     get_theme_detail,
 )
 from tomorrow_pick import compute_tomorrow_picks
+from charts import market_ranking_bar
 from news_analyzer import analyze_news_item, build_stock_index
 from etf2083_ui import render_etf2083_tab
 from market_ranking import (
